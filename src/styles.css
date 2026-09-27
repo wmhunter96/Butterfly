@@ -311,3 +311,32 @@ td { padding: 9px 8px; border-bottom: 1px solid var(--grid); }
   .ai-cat { grid-column: 2 / 4; grid-row: 2; }
   .ai-row-head span:nth-child(3) { display: none; }
 }
+
+/* categories */
+.btn.danger { background: var(--neg); border-color: var(--neg); color: #fff; }
+.btn.danger:hover { filter: brightness(1.05); }
+.icon-btn.subtle { border-color: transparent; background: none; width: 26px; height: 26px; color: var(--muted); }
+.icon-btn.subtle:hover { background: var(--hover); color: var(--text); }
+.icon-btn:disabled { opacity: .5; cursor: default; }
+.tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; border-radius: 99px; padding: 1px 8px; background: var(--hover); color: var(--muted); }
+.cat-add { display: flex; gap: 8px; padding-top: 10px; }
+.cat-add input { flex: 1; min-width: 0; max-width: 320px; }
+.cat-group .card-head { margin-bottom: 6px; }
+.cat-group-title { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cat-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 170px 30px; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--grid); }
+.cat-row select { height: 30px; min-width: 0; }
+.cat-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cat-count { text-align: right; }
+.editable { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.editable > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editable input { height: 30px; min-width: 0; width: 220px; }
+.modal-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 60; display: grid; place-items: center; padding: 16px; }
+.modal { width: min(440px, 100%); display: grid; gap: 10px; }
+.modal h2 { font-size: 16px; margin: 0; }
+.modal p { margin: 0; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+@media (max-width: 760px) {
+  .cat-row { grid-template-columns: minmax(0, 1fr) 130px 30px; }
+  .cat-count { display: none; }
+  .editable input { width: 100%; }
+}

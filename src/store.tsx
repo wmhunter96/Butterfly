@@ -14,6 +14,8 @@ type Store = {
   setCategory: (txId: string, categoryId: string | null) => Promise<void>;
   /** Make a transaction a transfer to another account (linking the matching transaction there), then reload. */
   markTransfer: (txId: string, accountId: string) => Promise<void>;
+  /** Add, rename, move or delete a category or group in Actual, then reload. Resolves to the id of anything created. */
+  changeCategories: (method: 'POST' | 'PATCH' | 'DELETE', path: string, body: object) => Promise<string | null>;
   /** Reflect categories written elsewhere (AI review) without reloading from Actual. */
   categorized: (changes: { txId: string; categoryId: string }[]) => void;
   demo: boolean;
@@ -125,6 +127,11 @@ export function StoreProvider({ children, session, onSignedOut }: { children: Re
     async markTransfer(txId, accountId) {
       await api('/api/transactions/' + encodeURIComponent(txId) + '/transfer', { method: 'POST', body: JSON.stringify({ accountId }) });
       await load(true);
+    },
+    async changeCategories(method, path, body) {
+      const { id } = await api<{ id: string | null }>(path, { method, body: JSON.stringify(body) });
+      await load(true);
+      return id;
     },
     categorized(changes) {
       const byId = new Map(changes.map((c) => [c.txId, c.categoryId]));

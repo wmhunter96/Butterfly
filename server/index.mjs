@@ -4,7 +4,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDemoData } from './demo.mjs';
-import { actualConfigured, loadActualData, makeTransfer, setPayeeCategoryRule, setTransactionCategories, setTransactionCategory, syncActual, syncBanks } from './actual.mjs';
+import {
+  actualConfigured,
+  createCategory,
+  createCategoryGroup,
+  deleteCategory,
+  deleteCategoryGroup,
+  loadActualData,
+  makeTransfer,
+  moveCategory,
+  renameCategory,
+  renameCategoryGroup,
+  setPayeeCategoryRule,
+  setTransactionCategories,
+  setTransactionCategory,
+  syncActual,
+  syncBanks,
+} from './actual.mjs';
+import { badRequest, checkDeleteTarget, cleanName, demoEdits, reconcileProperties } from './categories.mjs';
 import { aiConfigured, suggestCategories } from './ai.mjs';
 import { applyTransferLocally, counterpartIndex, findCounterpart } from './transfers.mjs';
 
@@ -181,6 +198,102 @@ app.post('/api/transactions/:id/transfer', async (req, res) => {
     res.status(502).json({ error: String(err?.message || err) });
   }
 });
+
+// ---- categories and category groups (written to Actual) ----
+
+/**
+ * Runs a category edit against Actual (or the demo data), reloads, and keeps saved property
+ * settings in step. `edit` gets the current data and returns the id of anything it created.
+ */
+async function editCategories(res, edit) {
+  try {
+    const data = await getData();
+    const before = { categoryGroups: structuredClone(data.categoryGroups), categories: structuredClone(data.categories) };
+    const id = await edit(data);
+    const after = DEMO ? data : await getData(true);
+    const settings = reconcileProperties(readSettings(), before, after);
+    if (settings) fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    res.json({ ok: true, id: id ?? null });
+  } catch (err) {
+    console.error('Category change failed:', err);
+    res.status(err.status ?? 502).json({ error: String(err?.message || err) });
+  }
+}
+
+function findGroup(data, id) {
+  const g = data.categoryGroups.find((x) => x.id === id);
+  if (!g) throw badRequest('Category group not found; refresh and try again');
+  return g;
+}
+function findCategory(data, id) {
+  const c = data.categories.find((x) => x.id === id);
+  if (!c) throw badRequest('Category not found; refresh and try again');
+  return c;
+}
+
+app.post('/api/category-groups', (req, res) =>
+  editCategories(res, (data) => {
+    const name = cleanName(req.body?.name);
+    return DEMO ? demoEdits.createGroup(data, name) : createCategoryGroup(name);
+  }),
+);
+
+app.patch('/api/category-groups/:id', (req, res) =>
+  editCategories(res, async (data) => {
+    const g = findGroup(data, req.params.id);
+    const name = cleanName(req.body?.name);
+    if (name === g.name) return;
+    if (DEMO) demoEdits.renameGroup(data, g.id, name);
+    else await renameCategoryGroup(g.id, name);
+  }),
+);
+
+app.delete('/api/category-groups/:id', (req, res) =>
+  editCategories(res, async (data) => {
+    const g = findGroup(data, req.params.id);
+    if (g.isIncome) throw badRequest("The income group can't be deleted");
+    const ids = data.categories.filter((c) => c.groupId === g.id).map((c) => c.id);
+    const target = checkDeleteTarget(data, ids, req.body?.transferCategoryId, false);
+    if (DEMO) demoEdits.deleteGroup(data, g.id, target);
+    else await deleteCategoryGroup(g.id, target);
+  }),
+);
+
+app.post('/api/categories', (req, res) =>
+  editCategories(res, (data) => {
+    const g = findGroup(data, req.body?.groupId);
+    const name = cleanName(req.body?.name);
+    return DEMO ? demoEdits.createCategory(data, name, g.id, g.isIncome) : createCategory(name, g.id, g.isIncome);
+  }),
+);
+
+app.patch('/api/categories/:id', (req, res) =>
+  editCategories(res, async (data) => {
+    const c = findCategory(data, req.params.id);
+    if (req.body?.name !== undefined) {
+      const name = cleanName(req.body.name);
+      if (name !== c.name) {
+        if (DEMO) demoEdits.renameCategory(data, c.id, name);
+        else await renameCategory(c.id, name);
+      }
+    }
+    if (req.body?.groupId !== undefined && req.body.groupId !== c.groupId) {
+      const g = findGroup(data, req.body.groupId);
+      if (g.isIncome !== c.isIncome) throw badRequest('Income categories can only move to the income group');
+      if (DEMO) demoEdits.moveCategory(data, c.id, g.id);
+      else await moveCategory(c.id, g.id);
+    }
+  }),
+);
+
+app.delete('/api/categories/:id', (req, res) =>
+  editCategories(res, async (data) => {
+    const c = findCategory(data, req.params.id);
+    const target = checkDeleteTarget(data, [c.id], req.body?.transferCategoryId, c.isIncome);
+    if (DEMO) demoEdits.deleteCategory(data, c.id, target);
+    else await deleteCategory(c.id, target);
+  }),
+);
 
 // ---- AI categorization: suggest, then the user reviews and applies ----
 app.post('/api/ai/suggest', async (req, res) => {

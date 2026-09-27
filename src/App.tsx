@@ -11,6 +11,7 @@ import { AccountDetailPage, AccountsPage } from './pages/Accounts';
 import { LoansPage } from './pages/Loans';
 import { PropertyPage } from './pages/Property';
 import { SettingsPage } from './pages/Settings';
+import { CategoriesPage } from './pages/Categories';
 
 type Session = { authRequired: boolean; authenticated: boolean; demo: boolean; ai?: boolean };
 
@@ -38,6 +39,7 @@ export function App() {
             <Route path="accounts/:id" element={<AccountDetailPage />} />
             <Route path="loans" element={<LoansPage />} />
             <Route path="property/:id" element={<PropertyPage />} />
+            <Route path="categories" element={<CategoriesPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/cash-flow" replace />} />
           </Route>

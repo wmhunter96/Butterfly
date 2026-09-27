@@ -175,3 +175,58 @@ export async function syncActual() {
   await connect();
   await api.sync();
 }
+
+// ---- categories and category groups ----
+
+export async function createCategoryGroup(name) {
+  await connect();
+  const id = await api.createCategoryGroup({ name, is_income: false, hidden: false });
+  await api.sync();
+  return id;
+}
+
+// Actual's update fills any field left out with its default (unhiding, or turning an income
+// group into an expense one), so renames send the whole current record.
+export async function renameCategoryGroup(id, name) {
+  await connect();
+  const g = (await api.getCategoryGroups()).find((x) => x.id === id);
+  if (!g) throw new Error('Category group not found; refresh and try again');
+  await api.updateCategoryGroup(id, { name, is_income: g.is_income, hidden: g.hidden });
+  await api.sync();
+}
+
+/** Deletes a group and its categories; their transactions move to transferCategoryId. */
+export async function deleteCategoryGroup(id, transferCategoryId) {
+  await connect();
+  await api.deleteCategoryGroup(id, transferCategoryId || undefined);
+  await api.sync();
+}
+
+export async function createCategory(name, groupId, isIncome) {
+  await connect();
+  const id = await api.createCategory({ name, group_id: groupId, is_income: isIncome, hidden: false });
+  await api.sync();
+  return id;
+}
+
+export async function renameCategory(id, name) {
+  await connect();
+  const c = (await api.getCategories()).find((x) => x.id === id);
+  if (!c) throw new Error('Category not found; refresh and try again');
+  await api.updateCategory(id, { name, group_id: c.group_id, is_income: c.is_income, hidden: c.hidden });
+  await api.sync();
+}
+
+/** Moves a category to the end of another group (Actual's own move, which keeps the sort order valid). */
+export async function moveCategory(id, groupId) {
+  await connect();
+  await internal.send('category-move', { id, groupId, targetId: null });
+  await api.sync();
+}
+
+/** Deletes a category; its transactions (and rules) move to transferCategoryId. */
+export async function deleteCategory(id, transferCategoryId) {
+  await connect();
+  await api.deleteCategory(id, transferCategoryId || undefined);
+  await api.sync();
+}

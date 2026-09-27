@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ArrowDownUp, CircleHelp, Home, Landmark, LogOut, MoreHorizontal, PieChart, ReceiptText, Settings, TrendingUp, Wallet, X } from 'lucide-react';
+import { ArrowDownUp, CircleHelp, Home, Landmark, LogOut, MoreHorizontal, PieChart, ReceiptText, Settings, Tags, TrendingUp, Wallet, X } from 'lucide-react';
 import { useStore } from '../store';
 import { isUncategorized } from '../lib/finance';
 import { Logo } from './Logo';
@@ -20,6 +20,7 @@ export function Layout() {
   const rest = [
     { to: '/accounts', label: 'Accounts', icon: Landmark },
     { to: '/loans', label: 'Loans', icon: Wallet },
+    { to: '/categories', label: 'Categories', icon: Tags },
     { to: '/transactions?filter=uncategorized', label: 'Uncategorized', icon: CircleHelp, badge: uncategorized },
   ];
   const props = model.settings.properties.map((p) => ({ to: '/property/' + encodeURIComponent(p.id), label: p.name, icon: Home }));
