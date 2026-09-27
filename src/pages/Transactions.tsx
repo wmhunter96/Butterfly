@@ -7,7 +7,6 @@ import { money } from '../lib/format';
 import { Card, PageHeader } from '../components/ui';
 import { TxList } from '../components/TxList';
 import { AiCategorize } from '../components/AiCategorize';
-import type { Transaction } from '../types';
 
 const FILTERS = [
   { id: '', label: 'All' },
@@ -35,35 +34,65 @@ export function TransactionsPage() {
   const propertyId = get('property');
   const property = model.settings.properties.find((p) => p.id === propertyId);
 
+  // Category, group or property scope. For a split, only the matching lines count toward totals.
+  const scopeMatch = useMemo(() => {
+    if (category) return (c: string | null) => c === category;
+    if (group) return (c: string | null) => !!c && model.catById.get(c)?.groupId === group;
+    if (property) return (c: string | null) => !!c && property.categoryIds.includes(c);
+    return null;
+  }, [model, category, group, property]);
+
   const txs = useMemo(() => {
-    const catMatch = (t: Transaction, pred: (c: string | null) => boolean) => (t.splits ? t.splits.some((s) => pred(s.categoryId)) : pred(t.categoryId));
     return model.data.transactions.filter((t) => {
       if (!inRange(t, period.start, period.end)) return false;
       if (filter === 'uncategorized' && !isUncategorized(model, t)) return false;
       if (filter === 'split' && !t.splits) return false;
       if (filter === 'transfers' && !t.transferAccountId) return false;
       if (account && t.accountId !== account) return false;
-      if (category && !catMatch(t, (c) => c === category)) return false;
-      if (group && !catMatch(t, (c) => !!c && model.catById.get(c)?.groupId === group)) return false;
-      if (property && !catMatch(t, (c) => !!c && property.categoryIds.includes(c))) return false;
+      if (scopeMatch && !(t.splits ? t.splits.some((s) => scopeMatch(s.categoryId)) : scopeMatch(t.categoryId))) return false;
       if (q) {
-        const hay = `${t.payee} ${t.notes} ${model.categoryName(t.categoryId)} ${Math.abs(t.amount).toFixed(2)}`.toLowerCase();
+        const cats = t.splits ? t.splits.map((s) => `${model.categoryName(s.categoryId)} ${s.notes}`).join(' ') : model.categoryName(t.categoryId);
+        const hay = `${t.payee} ${t.notes} ${cats} ${model.accountById.get(t.accountId)?.name ?? ''} ${Math.abs(t.amount).toFixed(2)}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [model, period, filter, q, account, category, group, property]);
+  }, [model, period, filter, q, account, scopeMatch]);
 
   const totals = useMemo(() => {
     let inflow = 0;
     let outflow = 0;
+    const add = (amount: number) => {
+      if (amount > 0) inflow += amount;
+      else outflow -= amount;
+    };
     for (const t of txs) {
       if (t.transferAccountId && !t.categoryId) continue;
-      if (t.amount > 0) inflow += t.amount;
-      else outflow -= t.amount;
+      if (scopeMatch && t.splits) for (const s of t.splits) if (scopeMatch(s.categoryId)) add(s.amount);
+      if (!(scopeMatch && t.splits)) add(t.amount);
     }
     return { inflow, outflow, uncategorizedIds: txs.filter((t) => isUncategorized(model, t)).map((t) => t.id) };
-  }, [txs, model]);
+  }, [txs, model, scopeMatch]);
+
+  // "Uncategorized" and a category scope can never both match, so picking one clears the other.
+  const setScope = (k: 'category' | 'group' | 'property' | '', v = '') => {
+    const p = new URLSearchParams(params);
+    p.delete('category');
+    p.delete('group');
+    p.delete('property');
+    if (k && v) {
+      p.set(k, v);
+      if (p.get('filter') === 'uncategorized') p.delete('filter');
+    }
+    setParams(p, { replace: true });
+  };
+  const setFilter = (f: string) => {
+    const p = new URLSearchParams(params);
+    if (f) p.set('filter', f);
+    else p.delete('filter');
+    if (f === 'uncategorized') ['category', 'group', 'property'].forEach((k) => p.delete(k));
+    setParams(p, { replace: true });
+  };
 
   const activeScope = category ? model.categoryName(category) : group ? model.groupById.get(group)?.name : property?.name;
 
@@ -80,17 +109,14 @@ export function TransactionsPage() {
             ))}
           </select>
           <select
-            value={category ? 'c:' + category : group ? 'g:' + group : ''}
+            value={category ? 'c:' + category : group ? 'g:' + group : property ? 'p:' + property.id : ''}
             aria-label="Category"
             onChange={(e) => {
               const v = e.target.value;
-              const p = new URLSearchParams(params);
-              p.delete('category');
-              p.delete('group');
-              p.delete('property');
-              if (v.startsWith('c:')) p.set('category', v.slice(2));
-              if (v.startsWith('g:')) p.set('group', v.slice(2));
-              setParams(p, { replace: true });
+              if (v.startsWith('c:')) setScope('category', v.slice(2));
+              else if (v.startsWith('g:')) setScope('group', v.slice(2));
+              else if (v.startsWith('p:')) setScope('property', v.slice(2));
+              else setScope('');
             }}
           >
             <option value="">All categories</option>
@@ -102,16 +128,23 @@ export function TransactionsPage() {
                 ))}
               </optgroup>
             ))}
+            {model.settings.properties.length > 0 && (
+              <optgroup label="Properties">
+                {model.settings.properties.map((p) => (
+                  <option key={p.id} value={'p:' + p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
         <div className="chips">
           {FILTERS.map((f) => (
-            <button key={f.id} className={'chip' + (filter === f.id ? ' on' : '')} onClick={() => set('filter', f.id)}>
+            <button key={f.id} className={'chip' + (filter === f.id ? ' on' : '')} onClick={() => setFilter(f.id)}>
               {f.label}
             </button>
           ))}
           {activeScope && (
-            <button className="chip on" onClick={() => { const p = new URLSearchParams(params); p.delete('category'); p.delete('group'); p.delete('property'); setParams(p, { replace: true }); }}>
+            <button className="chip on" onClick={() => setScope('')}>
               {activeScope} <X size={11} />
             </button>
           )}
