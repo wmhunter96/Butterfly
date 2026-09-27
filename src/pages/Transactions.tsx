@@ -164,7 +164,8 @@ export function TransactionsPage() {
           )}
         </div>
         {aiOpen && <AiCategorize txIds={totals.uncategorizedIds} onClose={() => setAiOpen(false)} />}
-        <TxList txs={txs} />
+        {/* A fresh list per filter, so switching filters draws the same rows as opening the link directly. */}
+        <TxList key={`${params.toString()}|${period.start}|${period.end}`} txs={txs} />
       </Card>
     </div>
   );
