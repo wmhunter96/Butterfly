@@ -129,7 +129,7 @@ export function StoreProvider({ children, session, onSignedOut }: { children: Re
       const r = await api<{ needsConfirm?: boolean }>(url, { method: 'POST', body: JSON.stringify({ accountId }) });
       if (r.needsConfirm) {
         // No matching transaction on that account: Actual would add one there, which is only right if the money really moved through it.
-        const name = model.accountById.get(accountId)?.name ?? 'that account';
+        const name = model.accountById.has(accountId) ? model.accountLabel(accountId) : 'that account';
         if (!confirm(`${name} has no matching transaction within 5 days. Mark it as a transfer anyway? Actual will add the other side to ${name}.`)) return;
         await api(url, { method: 'POST', body: JSON.stringify({ accountId, create: true }) });
       }

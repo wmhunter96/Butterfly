@@ -179,7 +179,7 @@ export function AiCategorize({ txIds, onClose }: { txIds: string[]; onClose: () 
                       ))}
                       <optgroup label="Transfer to or from account">
                         {accounts.filter((a) => !g.txIds.some((id) => txAccount.get(id) === a.id)).map((a) => (
-                          <option key={a.id} value={TRANSFER + a.id}>{a.name}</option>
+                          <option key={a.id} value={TRANSFER + a.id}>{model.accountLabel(a.id)}</option>
                         ))}
                       </optgroup>
                     </select>

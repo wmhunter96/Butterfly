@@ -48,7 +48,7 @@ export function CategorySelect({ tx }: { tx: Transaction }) {
       <optgroup label="Transfer to or from account">
         {others.map((a) => (
           <option key={a.id} value={TRANSFER + a.id}>
-            {a.name}
+            {model.accountLabel(a.id)}
           </option>
         ))}
       </optgroup>

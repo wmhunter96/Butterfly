@@ -52,7 +52,7 @@ export function TransactionsPage() {
       if (scopeMatch && !(t.splits ? t.splits.some((s) => scopeMatch(s.categoryId)) : scopeMatch(t.categoryId))) return false;
       if (q) {
         const cats = t.splits ? t.splits.map((s) => `${model.categoryName(s.categoryId)} ${s.notes}`).join(' ') : model.categoryName(t.categoryId);
-        const hay = `${t.payee} ${t.notes} ${cats} ${model.accountById.get(t.accountId)?.name ?? ''} ${Math.abs(t.amount).toFixed(2)}`.toLowerCase();
+        const hay = `${t.payee} ${t.notes} ${cats} ${model.accountLabel(t.accountId)} ${Math.abs(t.amount).toFixed(2)}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
