@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDemoData } from './demo.mjs';
-import { actualConfigured, loadActualData, setPayeeCategoryRule, setTransactionCategories, setTransactionCategory, syncActual, syncBanks } from './actual.mjs';
+import { actualConfigured, loadActualData, makeTransfer, setPayeeCategoryRule, setTransactionCategories, setTransactionCategory, syncActual, syncBanks } from './actual.mjs';
 import { aiConfigured, suggestCategories } from './ai.mjs';
+import { applyTransferLocally, counterpartIndex, findCounterpart } from './transfers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -138,6 +139,49 @@ app.patch('/api/transactions/:id', async (req, res) => {
   }
 });
 
+/** Marks each transaction as a transfer to the given account, linking the matching transaction on that account when there is one. */
+async function markTransfers(list) {
+  const data = await getData();
+  const byId = new Map(data.transactions.map((t) => [t.id, t]));
+  const accounts = new Set(data.accounts.filter((a) => !a.closed).map((a) => a.id));
+  const index = counterpartIndex(data);
+  const used = new Set();
+  let linked = 0;
+  for (const { txId, accountId } of list) {
+    const tx = byId.get(txId);
+    if (!tx) throw new Error('Transaction not found; refresh and try again');
+    if (!accounts.has(accountId) || accountId === tx.accountId) throw new Error('Pick a different open account to transfer to');
+    // Already a transfer, or just linked as the other side of an earlier one in this list.
+    if (tx.transferAccountId || tx.splits || used.has(tx.id)) continue;
+    used.add(tx.id);
+    const counterpart = findCounterpart(index, tx, accountId, used);
+    if (counterpart) {
+      used.add(counterpart.id);
+      linked++;
+    }
+    if (DEMO) applyTransferLocally(data, tx, accountId, counterpart);
+    else await makeTransfer({ txId, fromAccountId: tx.accountId, toAccountId: accountId, counterpartId: counterpart?.id ?? null });
+  }
+  if (!DEMO && list.length) {
+    await syncActual();
+    await getData(true);
+  }
+  return linked;
+}
+
+const transferList = (arr) =>
+  (Array.isArray(arr) ? arr : []).filter((x) => x && typeof x.txId === 'string' && typeof x.accountId === 'string').map((x) => ({ txId: x.txId, accountId: x.accountId }));
+
+app.post('/api/transactions/:id/transfer', async (req, res) => {
+  try {
+    const linked = await markTransfers(transferList([{ txId: req.params.id, accountId: req.body?.accountId }]));
+    res.json({ ok: true, linked });
+  } catch (err) {
+    console.error('Marking transfer failed:', err);
+    res.status(502).json({ error: String(err?.message || err) });
+  }
+});
+
 // ---- AI categorization: suggest, then the user reviews and applies ----
 app.post('/api/ai/suggest', async (req, res) => {
   const ids = Array.isArray(req.body?.txIds) ? req.body.txIds.map(String) : [];
@@ -153,6 +197,7 @@ app.post('/api/ai/apply', async (req, res) => {
   const changes = (Array.isArray(req.body?.changes) ? req.body.changes : [])
     .filter((c) => c && typeof c.txId === 'string' && typeof c.categoryId === 'string')
     .map((c) => ({ txId: c.txId, categoryId: c.categoryId }));
+  const transfers = transferList(req.body?.transfers);
   const rules = (Array.isArray(req.body?.rules) ? req.body.rules : []).filter((r) => r && typeof r.payeeId === 'string' && typeof r.categoryId === 'string');
   try {
     const data = await getData();
@@ -170,10 +215,12 @@ app.post('/api/ai/apply', async (req, res) => {
       }
       if (rules.length) await syncActual();
       changes.forEach((c) => byId.get(c.txId) && (byId.get(c.txId).categoryId = c.categoryId));
-      return res.json({ ok: true, updated: changes.length, rules: rules.length - rulesFailed, rulesFailed });
+      await markTransfers(transfers);
+      return res.json({ ok: true, updated: changes.length, transfers: transfers.length, rules: rules.length - rulesFailed, rulesFailed });
     }
     changes.forEach((c) => byId.get(c.txId) && (byId.get(c.txId).categoryId = c.categoryId));
-    res.json({ ok: true, updated: changes.length, rules: 0, rulesFailed: 0 });
+    await markTransfers(transfers);
+    res.json({ ok: true, updated: changes.length, transfers: transfers.length, rules: 0, rulesFailed: 0 });
   } catch (err) {
     console.error('AI apply failed:', err);
     res.status(502).json({ error: String(err?.message || err) });

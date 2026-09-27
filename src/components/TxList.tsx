@@ -4,13 +4,17 @@ import { useStore } from '../store';
 import { dayLabel, money } from '../lib/format';
 import { Avatar } from './ui';
 
+/** Select value prefix for "this is a transfer to/from that account" (shared with the AI review). */
+export const TRANSFER = 'transfer:';
+
 export function CategorySelect({ tx }: { tx: Transaction }) {
-  const { model, setCategory } = useStore();
+  const { model, setCategory, markTransfer } = useStore();
   const [busy, setBusy] = useState(false);
   const groups = useMemo(
     () => model.data.categoryGroups.filter((g) => !g.hidden).map((g) => ({ g, cats: model.data.categories.filter((c) => c.groupId === g.id && !c.hidden) })),
     [model],
   );
+  const others = model.data.accounts.filter((a) => !a.closed && a.id !== tx.accountId);
   return (
     <select
       className={tx.categoryId ? '' : 'uncat'}
@@ -20,8 +24,10 @@ export function CategorySelect({ tx }: { tx: Transaction }) {
       onClick={(e) => e.stopPropagation()}
       onChange={async (e) => {
         setBusy(true);
+        const v = e.target.value;
         try {
-          await setCategory(tx.id, e.target.value || null);
+          if (v.startsWith(TRANSFER)) await markTransfer(tx.id, v.slice(TRANSFER.length));
+          else await setCategory(tx.id, v || null);
         } catch (err) {
           alert((err as Error).message);
         } finally {
@@ -39,6 +45,13 @@ export function CategorySelect({ tx }: { tx: Transaction }) {
           ))}
         </optgroup>
       ))}
+      <optgroup label="Transfer to or from account">
+        {others.map((a) => (
+          <option key={a.id} value={TRANSFER + a.id}>
+            {a.name}
+          </option>
+        ))}
+      </optgroup>
     </select>
   );
 }

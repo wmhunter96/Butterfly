@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 let api = null;
+// The budget's own message handlers. api.updateTransaction returns before Actual finishes
+// its transfer bookkeeping, so transfers go through the awaited batch update instead.
+let internal = null;
 let ready = null;
 
 const cfg = () => ({
@@ -25,7 +28,7 @@ async function connect() {
     const c = cfg();
     fs.mkdirSync(c.dataDir, { recursive: true });
     api = await import('@actual-app/api');
-    await api.init({ dataDir: c.dataDir, serverURL: c.serverURL, password: c.password });
+    internal = await api.init({ dataDir: c.dataDir, serverURL: c.serverURL, password: c.password });
     await api.downloadBudget(c.syncId, c.encryptionPassword ? { password: c.encryptionPassword } : undefined);
   })().catch((err) => {
     ready = null;
@@ -78,7 +81,8 @@ export async function loadActualData() {
         date: t.date,
         accountId: a.id,
         amount: cents(t.amount),
-        payee: payee?.name || t.imported_payee || '',
+        // A transfer's payee is the other account; the bank's own description says more.
+        payee: (transferAccountId && t.imported_payee) || payee?.name || t.imported_payee || '',
         payeeId: t.payee || null,
         categoryId: subs.length ? null : t.category || null,
         notes: t.notes || '',
@@ -135,6 +139,35 @@ export async function setPayeeCategoryRule(payeeId, categoryId) {
       conditions: [{ field: 'payee', op: 'is', value: payeeId }],
       actions: [{ op: 'set', field: 'category', value: categoryId }],
     });
+  }
+}
+
+/**
+ * Turns a transaction into a transfer to another account. With a counterpart (the same money
+ * already imported on the other account) the two are linked; otherwise Actual creates the other side.
+ * Actual clears the category when both accounts are on budget.
+ */
+export async function makeTransfer({ txId, fromAccountId, toAccountId, counterpartId = null }) {
+  await connect();
+  const [payees, accounts] = await Promise.all([api.getPayees(), api.getAccounts()]);
+  const payeeOf = (acct) => payees.find((p) => p.transfer_acct === acct)?.id;
+  const toPayee = payeeOf(toAccountId);
+  const fromPayee = payeeOf(fromAccountId);
+  if (!toPayee || !fromPayee) throw new Error('Actual has no transfer payee for one of these accounts');
+  if (counterpartId) {
+    // Link the pair directly, the way Actual's "Make transfer" does, but without its
+    // follow-up step that would copy each side's notes over the other's.
+    const offBudget = (id) => Boolean(accounts.find((a) => a.id === id)?.offbudget);
+    const clear = offBudget(fromAccountId) === offBudget(toAccountId) ? { category: null } : {};
+    await internal.send('transactions-batch-update', {
+      updated: [
+        { id: txId, payee: toPayee, transfer_id: counterpartId, ...clear },
+        { id: counterpartId, payee: fromPayee, transfer_id: txId, ...clear },
+      ],
+      runTransfers: false,
+    });
+  } else {
+    await internal.send('transactions-batch-update', { updated: [{ id: txId, payee: toPayee }] });
   }
 }
 

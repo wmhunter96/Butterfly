@@ -3,6 +3,7 @@
 // Claude with the budget's categories and past categorizations as context.
 // Nothing is written here: the UI shows the suggestions for review first.
 import Anthropic from '@anthropic-ai/sdk';
+import { counterpartIndex, findCounterpart, TRANSFER_WORDS } from './transfers.mjs';
 
 // Haiku is the cheapest Claude model and plenty for picking a category.
 const MODEL = process.env.AI_MODEL || 'claude-haiku-4-5';
@@ -19,6 +20,10 @@ let client = null;
 const anthropic = () => (client ??= new Anthropic());
 
 const norm = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+// A suggestion's categoryId is either a category id or "transfer:<account id>".
+const TRANSFER = 'transfer:';
+export const transferTarget = (id) => (id?.startsWith(TRANSFER) ? id.slice(TRANSFER.length) : null);
+
 // Money in and money out from the same payee (a refund, a Venmo back) usually belong in different categories.
 const flowKey = (payee, amount) => (norm(payee) ? norm(payee) + (amount > 0 ? '|in' : '|out') : '');
 
@@ -34,7 +39,12 @@ function payeeHistory(data) {
     hist.set(k, h);
   };
   for (const t of data.transactions) {
-    if (t.transferAccountId || t.startingBalance) continue;
+    if (t.startingBalance) continue;
+    // Past transfers teach the payee too, so the next card payment is matched without asking Claude.
+    if (t.transferAccountId) {
+      if (!t.categoryId && !t.splits) add(t.payee, t.amount, TRANSFER + t.transferAccountId);
+      continue;
+    }
     if (t.splits) t.splits.forEach((s) => add(t.payee, s.amount, s.categoryId));
     else add(t.payee, t.amount, t.categoryId);
   }
@@ -48,13 +58,46 @@ export async function suggestCategories(data, txIds) {
   const catIds = new Set(cats.map((c) => c.id));
   const groupName = new Map(data.categoryGroups.map((g) => [g.id, g.name]));
   const acctName = new Map(data.accounts.map((a) => [a.id, a.name]));
+  const openAccts = data.accounts.filter((a) => !a.closed);
   const hist = payeeHistory(data);
+  // A transfer can go to any open account other than the transaction's own.
+  const validFor = (id, txs) => {
+    const to = transferTarget(id);
+    if (!to) return catIds.has(id);
+    return openAccts.some((a) => a.id === to) && txs.every((t) => t.accountId !== to);
+  };
 
-  // Group the requested transactions by payee: one decision per merchant.
   const wanted = new Set(txIds);
+  const pending = data.transactions.filter((t) => wanted.has(t.id) && !t.categoryId && !t.splits && !t.transferAccountId);
+
+  // Money that left one account and arrived in another (a card payment) is a transfer, not income or spending.
+  const transfers = [];
+  const paired = new Set();
+  const index = counterpartIndex(data);
+  for (const t of pending) {
+    if (paired.has(t.id)) continue;
+    const c = findCounterpart(index, t, null, paired);
+    if (!c) continue;
+    paired.add(t.id).add(c.id);
+    const worded = TRANSFER_WORDS.test(t.payee) || TRANSFER_WORDS.test(c.payee);
+    const dir = t.amount < 0 ? 'in on' : 'out of';
+    transfers.push({
+      key: 'xfer:' + t.id,
+      payee: t.payee,
+      payeeId: t.payeeId ?? null,
+      txs: [t],
+      categoryId: TRANSFER + c.accountId,
+      counterpartId: c.id,
+      confidence: worded ? 'high' : 'medium',
+      reason: `Same amount ${dir} ${acctName.get(c.accountId) ?? 'another account'} on ${c.date}`,
+      source: 'transfer',
+    });
+  }
+
+  // Group the rest by payee: one decision per merchant.
   const groups = new Map();
-  for (const t of data.transactions) {
-    if (!wanted.has(t.id) || t.categoryId || t.splits || t.transferAccountId) continue;
+  for (const t of pending) {
+    if (paired.has(t.id)) continue;
     const k = flowKey(t.payee, t.amount) || 'tx:' + t.id;
     const g = groups.get(k) ?? { key: k, payee: t.payee, payeeId: t.payeeId ?? null, txs: [] };
     g.txs.push(t);
@@ -63,13 +106,14 @@ export async function suggestCategories(data, txIds) {
   const all = [...groups.values()].sort((a, b) => b.txs.length - a.txs.length);
   const list = all.slice(0, MAX_GROUPS);
 
-  const out = [];
+  const out = [...transfers];
   const forAi = [];
   for (const g of list) {
     const h = hist.get(g.key);
     const top = h && topCategory(h);
-    if (top && catIds.has(top[0]) && h.total >= 2 && top[1] / h.total >= 0.75) {
-      out.push({ ...g, categoryId: top[0], confidence: 'high', reason: `You categorized ${top[1]} of ${h.total} past ${g.payee} transactions this way`, source: 'history' });
+    if (top && validFor(top[0], g.txs) && h.total >= 2 && top[1] / h.total >= 0.75) {
+      const what = transferTarget(top[0]) ? 'marked' : 'categorized';
+      out.push({ ...g, categoryId: top[0], confidence: 'high', reason: `You ${what} ${top[1]} of ${h.total} past ${g.payee} transactions this way`, source: 'history' });
     } else forAi.push(g);
   }
 
@@ -80,14 +124,18 @@ export async function suggestCategories(data, txIds) {
   } else if (forAi.length) {
     const catalog = cats
       .map((c) => `${c.id} | ${groupName.get(c.groupId) ?? ''} > ${c.name}${c.isIncome ? ' (income)' : ''}`)
+      .concat(openAccts.map((a) => `${TRANSFER}${a.id} | Transfer > ${a.name}`))
       .join('\n');
+    const choiceIds = [...catIds, ...openAccts.map((a) => TRANSFER + a.id)];
     const examples = [...hist.values()]
       .sort((a, b) => b.total - a.total)
       .slice(0, EXAMPLES)
       .map((h) => {
         const [cid, n] = topCategory(h);
         const c = data.categories.find((x) => x.id === cid);
-        return c ? `${h.name} (money ${h.key.endsWith('|in') ? 'in' : 'out'}) -> ${c.name} (${n}x)` : null;
+        const to = transferTarget(cid);
+        const label = to ? (acctName.has(to) ? 'Transfer > ' + acctName.get(to) : null) : c?.name;
+        return label ? `${h.name} (money ${h.key.endsWith('|in') ? 'in' : 'out'}) -> ${label} (${n}x)` : null;
       })
       .filter(Boolean)
       .join('\n');
@@ -95,6 +143,7 @@ export async function suggestCategories(data, txIds) {
       'You categorize bank transactions for a personal budget in Actual Budget.',
       'Pick the single best category for each merchant from the category list, using only the ids given.',
       'Negative amounts are money out (spending); positive amounts are money in (income or refunds). Income categories only fit money in.',
+      'Money moving between the household\'s own accounts is a transfer, not income or spending: a credit card or loan payment (on either the bank or the card side), or a move to savings or investing. Use the matching "transfer:" id for the OTHER account, never the account the transaction is in. Only pick a transfer when the description clearly names a payment or one of these accounts.',
       'Match how this household has categorized similar merchants before (examples below). If you cannot tell what a merchant is, use "none" rather than guessing.',
       'confidence: high when the merchant is clear and the category is obvious; medium when it is a reasonable guess; low when unsure.',
       'reason: a few words a person would find useful, e.g. "Grocery chain" or "Like your other gas stations".',
@@ -114,7 +163,7 @@ export async function suggestCategories(data, txIds) {
       while (next < batches.length) {
         const batch = batches[next++];
         try {
-          const r = await classify(system, batch, acctName, [...catIds]);
+          const r = await classify(system, batch, acctName, choiceIds);
           r.forEach((v, k) => results.set(k, v));
         } catch (err) {
           console.error('AI categorization failed:', err);
@@ -125,7 +174,7 @@ export async function suggestCategories(data, txIds) {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker));
     for (const g of forAi) {
       const r = results.get(g.key);
-      const categoryId = r && catIds.has(r.categoryId) ? r.categoryId : null;
+      const categoryId = r && validFor(r.categoryId, g.txs) ? r.categoryId : null;
       out.push({ ...g, categoryId, confidence: categoryId ? r.confidence : 'low', reason: r?.reason ?? '', source: categoryId ? 'ai' : 'none' });
     }
   }

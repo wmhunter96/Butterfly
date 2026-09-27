@@ -8,7 +8,7 @@ A self-hosted, Monarch-style personal finance dashboard that sits on top of [Act
 
 - **Cash flow**: income, expenses, net and savings rate for any period, a Sankey of where the money went (by group, category or both), a profit and loss view, and month-by-month bars.
 - **Spending**: donut and ranked breakdown by group, category or merchant, plus a stacked monthly trend. Click rows to chart just those.
-- **Transactions**: every account in one searchable list, grouped by day, with filters for uncategorized, split and transfer transactions. Changing a category writes it back to Actual.
+- **Transactions**: every account in one searchable list, grouped by day, with filters for uncategorized, split and transfer transactions. Changing a category writes it back to Actual. Pick an account under **Transfer to or from account** to turn a transaction into a transfer (like a credit card payment); if the same money already landed on that account, the two are linked instead of Actual adding a duplicate.
 - **Categorize with AI**: suggests a category for every uncategorized merchant at once. Merchants you've categorized consistently before are matched from your history; new ones go to Claude with your category list and past choices. You review and edit the suggestions, then apply them, optionally adding a rule in Actual so that payee is categorized automatically from then on.
 - **Net worth**: net worth over time, assets and liabilities by type, and change for the period.
 - **Accounts** and **Loans**: balances with sparklines, principal vs. interest paid, and an estimated payoff date for each loan.
@@ -64,7 +64,9 @@ How the numbers are counted: only on-budget accounts feed cash flow and spending
 
 ## Categorize with AI
 
-On **Transactions**, when the list has uncategorized transactions, click **Categorize with AI** next to the count. It works on whatever the list is showing, so pick a longer period (or **All time**) to clear an older backlog. Suggestions are grouped by merchant; untick anything you don't want, change a category, and tick **Always** to create a payee rule in Actual. Nothing is written to Actual until you click **Apply**. Split transactions and transfers are left alone.
+On **Transactions**, when the list has uncategorized transactions, click **Categorize with AI** next to the count. It works on whatever the list is showing, so pick a longer period (or **All time**) to clear an older backlog. Suggestions are grouped by merchant; untick anything you don't want, change a category, and tick **Always** to create a payee rule in Actual. Nothing is written to Actual until you click **Apply**. Split transactions and existing transfers are left alone.
+
+Credit card payments and moves between your own accounts are suggested as transfers so they stay out of income and spending. When the same amount leaves one account and arrives in another within five days, the two are paired and linked in Actual; payees you've marked as transfers before are matched from history; and Claude can also pick **Transfer** for a payment whose other side hasn't synced yet (Actual then creates it, and matches it when the bank import arrives).
 
 Without `ANTHROPIC_API_KEY` it still fills in merchants you've categorized the same way before. With it, merchant names, amounts, notes and account names for the transactions being categorized, plus your category names and past merchant-to-category choices, are sent to the Claude API.
 
