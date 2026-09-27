@@ -28,9 +28,9 @@ export function AccountsPage() {
   const yearAgo = iso(new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1));
   const [groupBy, setGroupByState] = useState<'type' | 'bank'>(() => {
     try {
-      return localStorage.getItem('butterfly.accountsGroupBy') === 'bank' ? 'bank' : 'type';
+      return localStorage.getItem('butterfly.accountsGroupBy') === 'type' ? 'type' : 'bank';
     } catch {
-      return 'type';
+      return 'bank';
     }
   });
   const setGroupBy = (v: 'type' | 'bank') => {
