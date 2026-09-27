@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDemoData } from './demo.mjs';
-import { actualConfigured, loadActualData, setTransactionCategory, syncBanks } from './actual.mjs';
+import { actualConfigured, loadActualData, setPayeeCategoryRule, setTransactionCategories, setTransactionCategory, syncActual, syncBanks } from './actual.mjs';
+import { aiConfigured, suggestCategories } from './ai.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -72,7 +73,7 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 app.get('/api/session', (req, res) => {
-  res.json({ authRequired: Boolean(APP_PASSWORD), authenticated: !APP_PASSWORD || validToken(cookie(req, 'bf_session')), demo: DEMO });
+  res.json({ authRequired: Boolean(APP_PASSWORD), authenticated: !APP_PASSWORD || validToken(cookie(req, 'bf_session')), demo: DEMO, ai: aiConfigured() });
 });
 
 app.post('/api/login', (req, res) => {
@@ -133,6 +134,48 @@ app.patch('/api/transactions/:id', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
+    res.status(502).json({ error: String(err?.message || err) });
+  }
+});
+
+// ---- AI categorization: suggest, then the user reviews and applies ----
+app.post('/api/ai/suggest', async (req, res) => {
+  const ids = Array.isArray(req.body?.txIds) ? req.body.txIds.map(String) : [];
+  try {
+    res.json(await suggestCategories(await getData(), ids));
+  } catch (err) {
+    console.error('AI suggest failed:', err);
+    res.status(502).json({ error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/ai/apply', async (req, res) => {
+  const changes = (Array.isArray(req.body?.changes) ? req.body.changes : [])
+    .filter((c) => c && typeof c.txId === 'string' && typeof c.categoryId === 'string')
+    .map((c) => ({ txId: c.txId, categoryId: c.categoryId }));
+  const rules = (Array.isArray(req.body?.rules) ? req.body.rules : []).filter((r) => r && typeof r.payeeId === 'string' && typeof r.categoryId === 'string');
+  try {
+    const data = await getData();
+    const byId = new Map(data.transactions.map((t) => [t.id, t]));
+    if (!DEMO) {
+      await setTransactionCategories(changes);
+      let rulesFailed = 0;
+      for (const r of rules) {
+        try {
+          await setPayeeCategoryRule(r.payeeId, r.categoryId);
+        } catch (err) {
+          rulesFailed++;
+          console.error('Could not create rule for payee', r.payeeId, err);
+        }
+      }
+      if (rules.length) await syncActual();
+      changes.forEach((c) => byId.get(c.txId) && (byId.get(c.txId).categoryId = c.categoryId));
+      return res.json({ ok: true, updated: changes.length, rules: rules.length - rulesFailed, rulesFailed });
+    }
+    changes.forEach((c) => byId.get(c.txId) && (byId.get(c.txId).categoryId = c.categoryId));
+    res.json({ ok: true, updated: changes.length, rules: 0, rulesFailed: 0 });
+  } catch (err) {
+    console.error('AI apply failed:', err);
     res.status(502).json({ error: String(err?.message || err) });
   }
 });

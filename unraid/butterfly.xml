@@ -29,5 +29,7 @@
   <Config Name="Actual Sync ID" Target="ACTUAL_SYNC_ID" Default="" Mode="" Description="In Actual: Settings, Show advanced settings, Sync ID" Type="Variable" Display="always" Required="false" Mask="false"></Config>
   <Config Name="Actual Encryption Password" Target="ACTUAL_ENCRYPTION_PASSWORD" Default="" Mode="" Description="Only if your budget file uses end-to-end encryption" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
   <Config Name="Butterfly Password" Target="APP_PASSWORD" Default="" Mode="" Description="Optional: require this password to open Butterfly" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Claude API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Optional: Claude API key (console.anthropic.com) for Categorize with AI on the Transactions page" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="AI Model" Target="AI_MODEL" Default="claude-opus-5" Mode="" Description="Claude model used for Categorize with AI" Type="Variable" Display="advanced" Required="false" Mask="false">claude-opus-5</Config>
   <Config Name="Cache Seconds" Target="CACHE_SECONDS" Default="60" Mode="" Description="How long to reuse data from Actual between page loads" Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
 </Container>

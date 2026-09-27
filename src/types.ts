@@ -6,6 +6,7 @@ export type Transaction = {
   accountId: string;
   amount: number; // dollars, negative = money out
   payee: string;
+  payeeId?: string | null;
   categoryId: string | null;
   notes: string;
   transferAccountId: string | null;

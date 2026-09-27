@@ -9,6 +9,7 @@ A self-hosted, Monarch-style personal finance dashboard that sits on top of [Act
 - **Cash flow**: income, expenses, net and savings rate for any period, a Sankey of where the money went (by group, category or both), a profit and loss view, and month-by-month bars.
 - **Spending**: donut and ranked breakdown by group, category or merchant, plus a stacked monthly trend. Click rows to chart just those.
 - **Transactions**: every account in one searchable list, grouped by day, with filters for uncategorized, split and transfer transactions. Changing a category writes it back to Actual.
+- **Categorize with AI**: suggests a category for every uncategorized merchant at once. Merchants you've categorized consistently before are matched from your history; new ones go to Claude with your category list and past choices. You review and edit the suggestions, then apply them, optionally adding a rule in Actual so that payee is categorized automatically from then on.
 - **Net worth**: net worth over time, assets and liabilities by type, and change for the period.
 - **Accounts** and **Loans**: balances with sparklines, principal vs. interest paid, and an estimated payoff date for each loan.
 - **Property pages**: one page per property with its monthly cash flow, biggest expenses, equity and transactions. Rentals can be set to "net only", so just the profit or loss reaches your main cash flow and spending instead of every repair bill.
@@ -45,6 +46,8 @@ You need a running Actual server (for example the `actualbudget/actual-server` c
 | `ACTUAL_ENCRYPTION_PASSWORD` | Only if the budget uses end-to-end encryption |
 | `APP_PASSWORD` | Optional password for Butterfly itself |
 | `CACHE_SECONDS` | How long data is reused between page loads (default 60) |
+| `ANTHROPIC_API_KEY` | Optional: a Claude API key from [console.anthropic.com](https://console.anthropic.com) for **Categorize with AI** |
+| `AI_MODEL` | Optional: the Claude model to use (default `claude-opus-5`) |
 
 The **Sync banks** button asks Actual to run its SimpleFIN sync, then reloads.
 
@@ -58,6 +61,12 @@ Open **Settings** in the app:
 Settings are stored in `/config/settings.json`.
 
 How the numbers are counted: only on-budget accounts feed cash flow and spending; transfers between your own accounts are ignored unless they carry a category (like a mortgage payment to an off-budget loan account); off-budget accounts (investments, home values, loans) show up in net worth, accounts and loans.
+
+## Categorize with AI
+
+On **Transactions**, when the list has uncategorized transactions, click **Categorize with AI** next to the count. It works on whatever the list is showing, so pick a longer period (or **All time**) to clear an older backlog. Suggestions are grouped by merchant; untick anything you don't want, change a category, and tick **Always** to create a payee rule in Actual. Nothing is written to Actual until you click **Apply**. Split transactions and transfers are left alone.
+
+Without `ANTHROPIC_API_KEY` it still fills in merchants you've categorized the same way before. With it, merchant names, amounts, notes and account names for the transactions being categorized, plus your category names and past merchant-to-category choices, are sent to the Claude API.
 
 ## Security
 

@@ -12,7 +12,7 @@ import { LoansPage } from './pages/Loans';
 import { PropertyPage } from './pages/Property';
 import { SettingsPage } from './pages/Settings';
 
-type Session = { authRequired: boolean; authenticated: boolean; demo: boolean };
+type Session = { authRequired: boolean; authenticated: boolean; demo: boolean; ai?: boolean };
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);

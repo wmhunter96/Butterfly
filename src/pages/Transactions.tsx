@@ -1,11 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import { useStore } from '../store';
 import { inRange, isUncategorized } from '../lib/finance';
 import { money } from '../lib/format';
 import { Card, PageHeader } from '../components/ui';
 import { TxList } from '../components/TxList';
+import { AiCategorize } from '../components/AiCategorize';
 import type { Transaction } from '../types';
 
 const FILTERS = [
@@ -18,6 +19,7 @@ const FILTERS = [
 export function TransactionsPage() {
   const { model, period } = useStore();
   const [params, setParams] = useSearchParams();
+  const [aiOpen, setAiOpen] = useState(false);
   const get = (k: string) => params.get(k) ?? '';
   const set = (k: string, v: string) => {
     const p = new URLSearchParams(params);
@@ -60,7 +62,7 @@ export function TransactionsPage() {
       if (t.amount > 0) inflow += t.amount;
       else outflow -= t.amount;
     }
-    return { inflow, outflow, uncategorized: txs.filter((t) => isUncategorized(model, t)).length };
+    return { inflow, outflow, uncategorizedIds: txs.filter((t) => isUncategorized(model, t)).map((t) => t.id) };
   }, [txs, model]);
 
   const activeScope = category ? model.categoryName(category) : group ? model.groupById.get(group)?.name : property?.name;
@@ -116,8 +118,19 @@ export function TransactionsPage() {
         </div>
         <div className="tx-summary">
           {txs.length} transactions · <span className="pos">{money(totals.inflow)} in</span> · {money(totals.outflow)} out
-          {totals.uncategorized > 0 && <> · <span style={{ color: 'var(--accent)' }}>{totals.uncategorized} uncategorized</span></>}
+          {totals.uncategorizedIds.length > 0 && (
+            <>
+              {' · '}
+              <span style={{ color: 'var(--accent)' }}>{totals.uncategorizedIds.length} uncategorized</span>
+              {!aiOpen && (
+                <button className="link-btn ai-link" onClick={() => setAiOpen(true)}>
+                  <Sparkles size={12} /> Categorize with AI
+                </button>
+              )}
+            </>
+          )}
         </div>
+        {aiOpen && <AiCategorize txIds={totals.uncategorizedIds} onClose={() => setAiOpen(false)} />}
         <TxList txs={txs} />
       </Card>
     </div>

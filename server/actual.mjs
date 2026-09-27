@@ -79,6 +79,7 @@ export async function loadActualData() {
         accountId: a.id,
         amount: cents(t.amount),
         payee: payee?.name || t.imported_payee || '',
+        payeeId: t.payee || null,
         categoryId: subs.length ? null : t.category || null,
         notes: t.notes || '',
         transferAccountId,
@@ -103,5 +104,41 @@ export async function loadActualData() {
 export async function setTransactionCategory(id, categoryId) {
   await connect();
   await api.updateTransaction(id, { category: categoryId });
+  await api.sync();
+}
+
+export async function setTransactionCategories(changes) {
+  await connect();
+  for (const { txId, categoryId } of changes) await api.updateTransaction(txId, { category: categoryId });
+  await api.sync();
+}
+
+/** Makes Actual categorize this payee's future transactions automatically. Reuses an existing payee-to-category rule when there is one. */
+export async function setPayeeCategoryRule(payeeId, categoryId) {
+  await connect();
+  const rules = await api.getPayeeRules(payeeId);
+  const existing = rules.find(
+    (r) =>
+      r.conditions?.length === 1 &&
+      r.conditions[0].field === 'payee' &&
+      r.conditions[0].op === 'is' &&
+      r.actions?.length === 1 &&
+      r.actions[0].op === 'set' &&
+      r.actions[0].field === 'category',
+  );
+  if (existing) {
+    if (existing.actions[0].value !== categoryId) await api.updateRule({ ...existing, actions: [{ ...existing.actions[0], value: categoryId }] });
+  } else {
+    await api.createRule({
+      stage: null,
+      conditionsOp: 'and',
+      conditions: [{ field: 'payee', op: 'is', value: payeeId }],
+      actions: [{ op: 'set', field: 'category', value: categoryId }],
+    });
+  }
+}
+
+export async function syncActual() {
+  await connect();
   await api.sync();
 }

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@actual-app/api": "^26.9.0",
+    "@anthropic-ai/sdk": "^0.128.0",
     "d3-sankey": "^0.12.3",
     "express": "^5.2.1",
     "lucide-react": "^1.48.0",

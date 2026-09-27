@@ -284,3 +284,30 @@ td { padding: 9px 8px; border-bottom: 1px solid var(--grid); }
 @media (max-width: 440px) {
   .pl th:nth-child(2), .pl td:nth-child(2) { display: none; }
 }
+
+/* AI categorization review */
+.ai-link { padding: 0; margin-left: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.ai-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 4px 0 12px; background: var(--surface); }
+.ai-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.ai-head b { display: inline-flex; align-items: center; gap: 6px; }
+.ai-intro { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ai-intro p { margin: 0; }
+.ai-list { max-height: 60vh; overflow-y: auto; }
+.ai-row { display: grid; grid-template-columns: 22px minmax(0, 1.6fr) minmax(0, 1.2fr) 52px; gap: 10px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--grid); }
+.ai-row.off .ai-merchant { opacity: .55; }
+.ai-row-head { border-bottom: 1px solid var(--border); padding-top: 2px; }
+.ai-merchant { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ai-merchant .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-merchant .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-merchant > div { min-width: 0; }
+.ai-cat { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ai-cat select { flex: 1; min-width: 0; height: 30px; }
+.ai-rule-col { text-align: center; }
+.conf { font-size: 10px; border-radius: 99px; padding: 1px 7px; white-space: nowrap; background: var(--hover); color: var(--muted); }
+.conf.high, .conf.history { background: var(--accent-soft); color: var(--accent); }
+.ai-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 10px; }
+@media (max-width: 760px) {
+  .ai-row { grid-template-columns: 22px minmax(0, 1fr) 40px; }
+  .ai-cat { grid-column: 2 / 4; grid-row: 2; }
+  .ai-row-head span:nth-child(3) { display: none; }
+}
