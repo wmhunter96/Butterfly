@@ -156,7 +156,11 @@ app.patch('/api/transactions/:id', async (req, res) => {
   }
 });
 
-/** Marks each transaction as a transfer to the given account, linking the matching transaction on that account when there is one. */
+/**
+ * Marks each transaction as a transfer to the given account, linking the matching transaction on that account.
+ * When that account has no matching transaction, Actual would add one there, so that only happens for items
+ * with create: true (the person confirmed it); the rest are skipped and returned as unmatched.
+ */
 async function markTransfers(list) {
   const data = await getData();
   const byId = new Map(data.transactions.map((t) => [t.id, t]));
@@ -164,35 +168,45 @@ async function markTransfers(list) {
   const index = counterpartIndex(data);
   const used = new Set();
   let linked = 0;
-  for (const { txId, accountId } of list) {
+  const unmatched = [];
+  let written = 0;
+  for (const { txId, accountId, create } of list) {
     const tx = byId.get(txId);
     if (!tx) throw new Error('Transaction not found; refresh and try again');
     if (!accounts.has(accountId) || accountId === tx.accountId) throw new Error('Pick a different open account to transfer to');
     // Already a transfer, or just linked as the other side of an earlier one in this list.
     if (tx.transferAccountId || tx.splits || used.has(tx.id)) continue;
-    used.add(tx.id);
     const counterpart = findCounterpart(index, tx, accountId, used);
+    if (!counterpart && !create) {
+      unmatched.push(txId);
+      continue;
+    }
+    used.add(tx.id);
     if (counterpart) {
       used.add(counterpart.id);
       linked++;
     }
+    written++;
     if (DEMO) applyTransferLocally(data, tx, accountId, counterpart);
     else await makeTransfer({ txId, fromAccountId: tx.accountId, toAccountId: accountId, counterpartId: counterpart?.id ?? null });
   }
-  if (!DEMO && list.length) {
+  if (!DEMO && written) {
     await syncActual();
     await getData(true);
   }
-  return linked;
+  return { linked, created: written - linked, unmatched };
 }
 
 const transferList = (arr) =>
-  (Array.isArray(arr) ? arr : []).filter((x) => x && typeof x.txId === 'string' && typeof x.accountId === 'string').map((x) => ({ txId: x.txId, accountId: x.accountId }));
+  (Array.isArray(arr) ? arr : [])
+    .filter((x) => x && typeof x.txId === 'string' && typeof x.accountId === 'string')
+    .map((x) => ({ txId: x.txId, accountId: x.accountId, create: x.create === true }));
 
 app.post('/api/transactions/:id/transfer', async (req, res) => {
   try {
-    const linked = await markTransfers(transferList([{ txId: req.params.id, accountId: req.body?.accountId }]));
-    res.json({ ok: true, linked });
+    const r = await markTransfers(transferList([{ txId: req.params.id, accountId: req.body?.accountId, create: req.body?.create }]));
+    if (r.unmatched.length) return res.json({ ok: false, needsConfirm: true });
+    res.json({ ok: true, ...r });
   } catch (err) {
     console.error('Marking transfer failed:', err);
     res.status(502).json({ error: String(err?.message || err) });
@@ -328,12 +342,12 @@ app.post('/api/ai/apply', async (req, res) => {
       }
       if (rules.length) await syncActual();
       changes.forEach((c) => byId.get(c.txId) && (byId.get(c.txId).categoryId = c.categoryId));
-      await markTransfers(transfers);
-      return res.json({ ok: true, updated: changes.length, transfers: transfers.length, rules: rules.length - rulesFailed, rulesFailed });
+      const x = await markTransfers(transfers);
+      return res.json({ ok: true, updated: changes.length, transfers: x.linked + x.created, unmatched: x.unmatched.length, rules: rules.length - rulesFailed, rulesFailed });
     }
     changes.forEach((c) => byId.get(c.txId) && (byId.get(c.txId).categoryId = c.categoryId));
-    await markTransfers(transfers);
-    res.json({ ok: true, updated: changes.length, transfers: transfers.length, rules: 0, rulesFailed: 0 });
+    const x = await markTransfers(transfers);
+    res.json({ ok: true, updated: changes.length, transfers: x.linked + x.created, unmatched: x.unmatched.length, rules: 0, rulesFailed: 0 });
   } catch (err) {
     console.error('AI apply failed:', err);
     res.status(502).json({ error: String(err?.message || err) });

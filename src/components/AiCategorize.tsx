@@ -61,12 +61,24 @@ export function AiCategorize({ txIds, onClose }: { txIds: string[]; onClose: () 
     setError('');
     const isTransfer = (g: Suggestion) => choices[g.key].categoryId.startsWith(TRANSFER);
     const changes = accepted.filter((g) => !isTransfer(g)).flatMap((g) => g.txIds.map((txId) => ({ txId, categoryId: choices[g.key].categoryId })));
-    const transfers = accepted.filter(isTransfer).flatMap((g) => g.txIds.map((txId) => ({ txId, accountId: choices[g.key].categoryId.slice(TRANSFER.length) })));
+    // Only suggestions that came with a matching transaction are known to link; any other transfer
+    // would make Actual add the other side on the chosen account, so ask first.
+    const proven = (g: Suggestion) => g.source === 'transfer' && choices[g.key].categoryId === g.categoryId;
+    const unproven = accepted.filter((g) => isTransfer(g) && !proven(g));
+    const create =
+      unproven.length > 0 &&
+      confirm(
+        `${unproven.map((g) => g.payee || '(no payee)').join(', ')}: no matching transaction on the account you picked. ` +
+          'Mark as transfers anyway? Actual will add the other side to that account. Cancel skips these.',
+      );
+    const transfers = accepted
+      .filter(isTransfer)
+      .flatMap((g) => g.txIds.map((txId) => ({ txId, accountId: choices[g.key].categoryId.slice(TRANSFER.length), create: !proven(g) && create })));
     const rules = accepted
       .filter((g) => g.payeeId && choices[g.key].rule && !isTransfer(g))
       .map((g) => ({ payeeId: g.payeeId!, categoryId: choices[g.key].categoryId }));
     try {
-      const r = await api<{ updated: number; transfers: number; rules: number; rulesFailed: number }>('/api/ai/apply', {
+      const r = await api<{ updated: number; transfers: number; unmatched: number; rules: number; rulesFailed: number }>('/api/ai/apply', {
         method: 'POST',
         body: JSON.stringify({ changes, transfers, rules }),
       });
@@ -80,7 +92,8 @@ export function AiCategorize({ txIds, onClose }: { txIds: string[]; onClose: () 
       setSummary(
         said[0].toUpperCase() + said.slice(1) +
           (r.rules ? ` and added ${r.rules} payee rule${r.rules === 1 ? '' : 's'} in Actual` : '') +
-          (r.rulesFailed ? `. ${r.rulesFailed} rule${r.rulesFailed === 1 ? '' : 's'} could not be created.` : '.'),
+          (r.rulesFailed ? `. ${r.rulesFailed} rule${r.rulesFailed === 1 ? '' : 's'} could not be created.` : '.') +
+          (r.unmatched ? ` Skipped ${r.unmatched} transfer${r.unmatched === 1 ? '' : 's'} with no matching transaction.` : ''),
       );
       setState('done');
     } catch (e) {

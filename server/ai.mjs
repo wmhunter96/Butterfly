@@ -22,6 +22,7 @@ const anthropic = () => (client ??= new Anthropic());
 const norm = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 // A suggestion's categoryId is either a category id or "transfer:<account id>".
 const TRANSFER = 'transfer:';
+const UNMATCHED = 'Looks like a payment or transfer, but no matching transaction is in your other accounts. Pick the account it moved through, or a category.';
 export const transferTarget = (id) => (id?.startsWith(TRANSFER) ? id.slice(TRANSFER.length) : null);
 
 // Money in and money out from the same payee (a refund, a Venmo back) usually belong in different categories.
@@ -108,14 +109,28 @@ export async function suggestCategories(data, txIds) {
 
   const out = [...transfers];
   const forAi = [];
+  const lookLikeTransfers = [];
   for (const g of list) {
     const h = hist.get(g.key);
     const top = h && topCategory(h);
-    if (top && validFor(top[0], g.txs) && h.total >= 2 && top[1] / h.total >= 0.75) {
-      const what = transferTarget(top[0]) ? 'marked' : 'categorized';
-      out.push({ ...g, categoryId: top[0], confidence: 'high', reason: `You ${what} ${top[1]} of ${h.total} past ${g.payee} transactions this way`, source: 'history' });
-    } else forAi.push(g);
+    if (!(top && validFor(top[0], g.txs) && h.total >= 2 && top[1] / h.total >= 0.75)) {
+      forAi.push(g);
+      continue;
+    }
+    const to = transferTarget(top[0]);
+    if (!to) {
+      out.push({ ...g, categoryId: top[0], confidence: 'high', reason: `You categorized ${top[1]} of ${h.total} past ${g.payee} transactions this way`, source: 'history' });
+      continue;
+    }
+    // Past transfers only say where the money usually goes. Without the matching transaction on that
+    // account, marking it would make Actual invent one there, so leave it for the person to decide.
+    const matched = g.txs.filter((t) => findCounterpart(index, t, to, paired));
+    if (matched.length === g.txs.length) {
+      g.txs.forEach((t) => paired.add(findCounterpart(index, t, to, paired).id));
+      out.push({ ...g, categoryId: top[0], confidence: 'high', reason: `Matches a transaction on ${acctName.get(to)}, like ${top[1]} past ${g.payee} transfers`, source: 'transfer' });
+    } else lookLikeTransfers.push(g);
   }
+  lookLikeTransfers.forEach((g) => out.push({ ...g, categoryId: null, confidence: 'low', reason: UNMATCHED, source: 'none' }));
 
   let aiError = null;
   if (forAi.length && !aiConfigured()) {
@@ -124,9 +139,10 @@ export async function suggestCategories(data, txIds) {
   } else if (forAi.length) {
     const catalog = cats
       .map((c) => `${c.id} | ${groupName.get(c.groupId) ?? ''} > ${c.name}${c.isIncome ? ' (income)' : ''}`)
-      .concat(openAccts.map((a) => `${TRANSFER}${a.id} | Transfer > ${a.name}`))
+      .concat('transfer | A payment or transfer between the household\'s own accounts')
       .join('\n');
-    const choiceIds = [...catIds, ...openAccts.map((a) => TRANSFER + a.id)];
+    // Claude can say something is a transfer but never which account: only a matching transaction proves that.
+    const choiceIds = [...catIds, 'transfer'];
     const examples = [...hist.values()]
       .sort((a, b) => b.total - a.total)
       .slice(0, EXAMPLES)
@@ -143,7 +159,7 @@ export async function suggestCategories(data, txIds) {
       'You categorize bank transactions for a personal budget in Actual Budget.',
       'Pick the single best category for each merchant from the category list, using only the ids given.',
       'Negative amounts are money out (spending); positive amounts are money in (income or refunds). Income categories only fit money in.',
-      'Money moving between the household\'s own accounts is a transfer, not income or spending: a credit card or loan payment (on either the bank or the card side), or a move to savings or investing. Use the matching "transfer:" id for the OTHER account, never the account the transaction is in. Only pick a transfer when the description clearly names a payment or one of these accounts.',
+      'Money moving between the household\'s own accounts is not income or spending: a credit card or loan payment (on either the bank or the card side), or a move to savings or investing. Use "transfer" for those, never an income or spending category.',
       'Match how this household has categorized similar merchants before (examples below). If you cannot tell what a merchant is, use "none" rather than guessing.',
       'confidence: high when the merchant is clear and the category is obvious; medium when it is a reasonable guess; low when unsure.',
       'reason: a few words a person would find useful, e.g. "Grocery chain" or "Like your other gas stations".',
@@ -174,6 +190,10 @@ export async function suggestCategories(data, txIds) {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker));
     for (const g of forAi) {
       const r = results.get(g.key);
+      if (r?.categoryId === 'transfer') {
+        out.push({ ...g, categoryId: null, confidence: 'low', reason: UNMATCHED, source: 'none' });
+        continue;
+      }
       const categoryId = r && validFor(r.categoryId, g.txs) ? r.categoryId : null;
       out.push({ ...g, categoryId, confidence: categoryId ? r.confidence : 'low', reason: r?.reason ?? '', source: categoryId ? 'ai' : 'none' });
     }

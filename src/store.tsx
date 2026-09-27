@@ -125,7 +125,14 @@ export function StoreProvider({ children, session, onSignedOut }: { children: Re
       setData({ ...data, transactions: data.transactions.map((t) => (t.id === txId ? { ...t, categoryId } : t)) });
     },
     async markTransfer(txId, accountId) {
-      await api('/api/transactions/' + encodeURIComponent(txId) + '/transfer', { method: 'POST', body: JSON.stringify({ accountId }) });
+      const url = '/api/transactions/' + encodeURIComponent(txId) + '/transfer';
+      const r = await api<{ needsConfirm?: boolean }>(url, { method: 'POST', body: JSON.stringify({ accountId }) });
+      if (r.needsConfirm) {
+        // No matching transaction on that account: Actual would add one there, which is only right if the money really moved through it.
+        const name = model.accountById.get(accountId)?.name ?? 'that account';
+        if (!confirm(`${name} has no matching transaction within 5 days. Mark it as a transfer anyway? Actual will add the other side to ${name}.`)) return;
+        await api(url, { method: 'POST', body: JSON.stringify({ accountId, create: true }) });
+      }
       await load(true);
     },
     async changeCategories(method, path, body) {
