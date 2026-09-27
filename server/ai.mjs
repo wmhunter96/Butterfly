@@ -4,7 +4,10 @@
 // Nothing is written here: the UI shows the suggestions for review first.
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL = process.env.AI_MODEL || 'claude-opus-5';
+// Haiku is the cheapest Claude model and plenty for picking a category.
+const MODEL = process.env.AI_MODEL || 'claude-haiku-4-5';
+// Haiku 4.5 takes no effort setting or adaptive thinking; larger models get both, plus refusal fallbacks.
+const SMALL = MODEL.startsWith('claude-haiku');
 const MAX_GROUPS = 400;
 const BATCH = 60;
 const CONCURRENCY = 3;
@@ -153,12 +156,10 @@ async function classify(system, batch, acctName, catIds) {
   const res = await anthropic().beta.messages.create({
     model: MODEL,
     max_tokens: 16000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    thinking: { type: 'adaptive' },
+    ...(SMALL ? {} : { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', thinking: { type: 'adaptive' } }),
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     output_config: {
-      effort: 'medium',
+      ...(SMALL ? {} : { effort: 'medium' }),
       format: {
         type: 'json_schema',
         schema: {

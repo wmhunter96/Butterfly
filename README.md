@@ -47,7 +47,7 @@ You need a running Actual server (for example the `actualbudget/actual-server` c
 | `APP_PASSWORD` | Optional password for Butterfly itself |
 | `CACHE_SECONDS` | How long data is reused between page loads (default 60) |
 | `ANTHROPIC_API_KEY` | Optional: a Claude API key from [console.anthropic.com](https://console.anthropic.com) for **Categorize with AI** |
-| `AI_MODEL` | Optional: the Claude model to use (default `claude-opus-5`) |
+| `AI_MODEL` | Optional: the Claude model to use (default `claude-haiku-4-5`) |
 
 The **Sync banks** button asks Actual to run its SimpleFIN sync, then reloads.
 
