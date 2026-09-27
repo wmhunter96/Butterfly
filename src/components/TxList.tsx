@@ -1,20 +1,53 @@
 import { useMemo, useState } from 'react';
 import type { Transaction } from '../types';
 import { useStore } from '../store';
+import type { Model } from '../lib/model';
 import { dayLabel, money } from '../lib/format';
 import { Avatar } from './ui';
 
 /** Select value prefix for "this is a transfer to/from that account" (shared with the AI review). */
 export const TRANSFER = 'transfer:';
 
-export function CategorySelect({ tx }: { tx: Transaction }) {
-  const { model, setCategory, markTransfer } = useStore();
-  const [busy, setBusy] = useState(false);
+/** Whether a row gets a category picker, and so can be picked for a bulk edit. Splits, starting balances and linked transfers can't. */
+export function editable(model: Model, t: Transaction) {
+  if (t.splits || t.startingBalance) return false;
+  if (!t.categoryId && (t.transferAccountId || model.accountById.get(t.accountId)?.offBudget)) return false;
+  return true;
+}
+
+/** Visible categories by group, then open accounts (other than excludeAccountId) as transfer targets. */
+export function CategoryOptions({ excludeAccountId }: { excludeAccountId?: string }) {
+  const { model } = useStore();
   const groups = useMemo(
     () => model.data.categoryGroups.filter((g) => !g.hidden).map((g) => ({ g, cats: model.data.categories.filter((c) => c.groupId === g.id && !c.hidden) })),
     [model],
   );
-  const others = model.data.accounts.filter((a) => !a.closed && a.id !== tx.accountId);
+  const others = model.data.accounts.filter((a) => !a.closed && a.id !== excludeAccountId);
+  return (
+    <>
+      {groups.map(({ g, cats }) => (
+        <optgroup key={g.id} label={g.name}>
+          {cats.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      <optgroup label="Transfer to or from account">
+        {others.map((a) => (
+          <option key={a.id} value={TRANSFER + a.id}>
+            {model.accountLabel(a.id)}
+          </option>
+        ))}
+      </optgroup>
+    </>
+  );
+}
+
+export function CategorySelect({ tx }: { tx: Transaction }) {
+  const { setCategory, markTransfer } = useStore();
+  const [busy, setBusy] = useState(false);
   return (
     <select
       className={tx.categoryId ? '' : 'uncat'}
@@ -36,27 +69,14 @@ export function CategorySelect({ tx }: { tx: Transaction }) {
       }}
     >
       <option value="">Uncategorized</option>
-      {groups.map(({ g, cats }) => (
-        <optgroup key={g.id} label={g.name}>
-          {cats.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-      <optgroup label="Transfer to or from account">
-        {others.map((a) => (
-          <option key={a.id} value={TRANSFER + a.id}>
-            {model.accountLabel(a.id)}
-          </option>
-        ))}
-      </optgroup>
+      <CategoryOptions excludeAccountId={tx.accountId} />
     </select>
   );
 }
 
-export function TxList({ txs, pageSize = 150, showAccount = true }: { txs: Transaction[]; pageSize?: number; showAccount?: boolean }) {
+type Selection = { selected: Set<string>; onToggle: (id: string, range: boolean) => void };
+
+export function TxList({ txs, pageSize = 150, showAccount = true, selection }: { txs: Transaction[]; pageSize?: number; showAccount?: boolean; selection?: Selection }) {
   const { model } = useStore();
   const [limit, setLimit] = useState(pageSize);
   const shown = txs.slice(0, limit);
@@ -97,8 +117,25 @@ export function TxList({ txs, pageSize = 150, showAccount = true }: { txs: Trans
             <span className="num">{money(d.total)}</span>
           </div>
           {d.txs.map((t) => (
-            <div className="tx-row" key={t.id}>
+            <div className={'tx-row' + (selection?.selected.has(t.id) ? ' picked' : '')} key={t.id}>
               <div className="tx-merchant">
+                {selection &&
+                  (editable(model, t) ? (
+                    <input
+                      type="checkbox"
+                      className="tx-check"
+                      checked={selection.selected.has(t.id)}
+                      aria-label={'Select ' + (t.payee || 'transaction')}
+                      // Click rather than change, so shift-click can select a range.
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selection.onToggle(t.id, e.shiftKey);
+                      }}
+                      onChange={() => {}}
+                    />
+                  ) : (
+                    <span className="tx-check" title="Splits, starting balances and transfers can't be bulk edited" />
+                  ))}
                 <Avatar name={t.payee || '?'} />
                 <div>
                   <div className="name" title={t.notes || t.payee}>{t.payee || '(no payee)'}</div>

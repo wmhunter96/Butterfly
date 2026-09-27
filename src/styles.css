@@ -201,6 +201,13 @@ td { padding: 9px 8px; border-bottom: 1px solid var(--grid); }
 .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
 .chip.on { background: var(--text); color: var(--surface); border-color: var(--text); }
 .tx-summary { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+.tx-summary > .tx-check { margin: 0 10px 0 8px; vertical-align: -3px; }
+.tx-check { width: 16px; height: 16px; flex: none; margin: 0; accent-color: var(--accent); cursor: pointer; }
+span.tx-check { display: inline-block; cursor: default; }
+.tx-row.picked { background: var(--accent-soft); }
+.bulk-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; margin: 0 0 8px; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.bulk-bar select { flex: 1; min-width: 180px; max-width: 320px; height: 32px; }
+.bulk-note { font-size: 12px; margin: 0 0 8px; }
 .tx-day { display: flex; justify-content: space-between; padding: 8px 8px; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--text-2); border-bottom: 1px solid var(--border); }
 .tx-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 110px; gap: 12px; align-items: center; padding: 8px; border-bottom: 1px solid var(--grid); }
 .tx-row:hover { background: var(--hover); }

@@ -17,7 +17,7 @@ type Store = {
   /** Add, rename, move or delete a category or group in Actual, then reload. Resolves to the id of anything created. */
   changeCategories: (method: 'POST' | 'PATCH' | 'DELETE', path: string, body: object) => Promise<string | null>;
   /** Reflect categories written elsewhere (AI review) without reloading from Actual. */
-  categorized: (changes: { txId: string; categoryId: string }[]) => void;
+  categorized: (changes: { txId: string; categoryId: string | null }[]) => void;
   demo: boolean;
   ai: boolean;
   authRequired: boolean;
@@ -142,7 +142,7 @@ export function StoreProvider({ children, session, onSignedOut }: { children: Re
     },
     categorized(changes) {
       const byId = new Map(changes.map((c) => [c.txId, c.categoryId]));
-      setData({ ...data, transactions: data.transactions.map((t) => (byId.has(t.id) ? { ...t, categoryId: byId.get(t.id)! } : t)) });
+      setData({ ...data, transactions: data.transactions.map((t) => (byId.has(t.id) ? { ...t, categoryId: byId.get(t.id) ?? null } : t)) });
     },
     async signOut() {
       await api('/api/logout', { method: 'POST' });

@@ -213,6 +213,40 @@ app.post('/api/transactions/:id/transfer', async (req, res) => {
   }
 });
 
+/**
+ * Bulk edit from the Transactions page: one category (or null for uncategorized) for many
+ * transactions, or all of them marked as transfers to one account. Splits and starting balances
+ * are skipped, as are transfers when setting a transfer (they're already linked) and transactions
+ * already in the target account. A transfer with no matching transaction on the other account only
+ * goes through with create: true; otherwise it comes back in `unmatched` so the UI can ask first.
+ */
+app.post('/api/transactions/bulk', async (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body?.txIds) ? req.body.txIds : []).filter((x) => typeof x === 'string'))];
+  const transferTo = typeof req.body?.transferAccountId === 'string' ? req.body.transferAccountId : null;
+  const categoryId = transferTo ? null : (req.body?.categoryId ?? null);
+  try {
+    const data = await getData();
+    const byId = new Map(data.transactions.map((t) => [t.id, t]));
+    if (categoryId !== null && !data.categories.some((c) => c.id === categoryId)) throw badRequest('Category not found; refresh and try again');
+    if (transferTo && !data.accounts.some((a) => a.id === transferTo && !a.closed)) throw badRequest('Pick an open account to transfer to');
+    const txs = ids.map((id) => byId.get(id)).filter(Boolean);
+    const ok = txs.filter((t) => !t.splits && !t.startingBalance && (transferTo ? !t.transferAccountId && t.accountId !== transferTo : true));
+    const skipped = ids.length - ok.length;
+
+    if (transferTo) {
+      const r = await markTransfers(ok.map((t) => ({ txId: t.id, accountId: transferTo, create: req.body?.create === true })));
+      return res.json({ ok: true, updated: r.linked + r.created, linked: r.linked, created: r.created, unmatched: r.unmatched, skipped });
+    }
+    const changes = ok.filter((t) => t.categoryId !== categoryId).map((t) => ({ txId: t.id, categoryId }));
+    if (changes.length && !DEMO) await setTransactionCategories(changes);
+    for (const c of changes) byId.get(c.txId).categoryId = c.categoryId;
+    res.json({ ok: true, updated: changes.length, skipped });
+  } catch (err) {
+    console.error('Bulk edit failed:', err);
+    res.status(err.status ?? 502).json({ error: String(err?.message || err) });
+  }
+});
+
 // ---- categories and category groups (written to Actual) ----
 
 /**

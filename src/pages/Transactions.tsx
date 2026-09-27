@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
 import { useStore } from '../store';
 import { inRange, isUncategorized } from '../lib/finance';
 import { money } from '../lib/format';
 import { Card, PageHeader } from '../components/ui';
-import { TxList } from '../components/TxList';
+import { TxList, editable } from '../components/TxList';
+import { BulkEdit } from '../components/BulkEdit';
 import { AiCategorize } from '../components/AiCategorize';
 
 const FILTERS = [
@@ -19,6 +20,9 @@ export function TransactionsPage() {
   const { model, period } = useStore();
   const [params, setParams] = useSearchParams();
   const [aiOpen, setAiOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState('');
+  const lastPick = useRef<string | null>(null);
   const get = (k: string) => params.get(k) ?? '';
   const set = (k: string, v: string) => {
     const p = new URLSearchParams(params);
@@ -58,6 +62,34 @@ export function TransactionsPage() {
       return true;
     });
   }, [model, period, filter, q, account, scopeMatch]);
+
+  // Only rows still in the list count as selected, so changing a filter never edits rows you can't see.
+  const selectable = useMemo(() => txs.filter((t) => editable(model, t)), [txs, model]);
+  const picked = useMemo(() => selectable.filter((t) => selected.has(t.id)).map((t) => t.id), [selectable, selected]);
+  const allPicked = selectable.length > 0 && picked.length === selectable.length;
+
+  const toggle = (id: string, range: boolean) => {
+    setNotice('');
+    // Shift-click sets every row between the last one clicked and this one to this row's new state.
+    const ids = selectable.map((t) => t.id);
+    const a = range && lastPick.current ? ids.indexOf(lastPick.current) : -1;
+    const b = ids.indexOf(id);
+    const span = a >= 0 && b >= 0 ? ids.slice(Math.min(a, b), Math.max(a, b) + 1) : [id];
+    const on = !selected.has(id);
+    const next = new Set(selected);
+    for (const x of span) on ? next.add(x) : next.delete(x);
+    setSelected(next);
+    lastPick.current = id;
+  };
+  const toggleAll = () => {
+    setNotice('');
+    setSelected(allPicked ? new Set() : new Set(selectable.map((t) => t.id)));
+    lastPick.current = null;
+  };
+  const clearSelection = () => {
+    setSelected(new Set());
+    lastPick.current = null;
+  };
 
   const totals = useMemo(() => {
     let inflow = 0;
@@ -154,6 +186,19 @@ export function TransactionsPage() {
           )}
         </div>
         <div className="tx-summary">
+          {selectable.length > 0 && (
+            <input
+              type="checkbox"
+              className="tx-check"
+              checked={allPicked}
+              ref={(el) => {
+                if (el) el.indeterminate = picked.length > 0 && !allPicked;
+              }}
+              onChange={toggleAll}
+              aria-label={allPicked ? 'Clear selection' : `Select all ${selectable.length} transactions`}
+              title={allPicked ? 'Clear selection' : `Select all ${selectable.length}` + (selectable.length < txs.length ? ` (${txs.length - selectable.length} splits and transfers can't be bulk edited)` : '')}
+            />
+          )}
           {txs.length} transactions · <span className="pos">{money(totals.inflow)} in</span> · {money(totals.outflow)} out
           {totals.uncategorizedIds.length > 0 && (
             <>
@@ -167,9 +212,28 @@ export function TransactionsPage() {
             </>
           )}
         </div>
+        {picked.length > 0 && (
+          <BulkEdit
+            txIds={picked}
+            onClear={clearSelection}
+            onDone={(m) => {
+              clearSelection();
+              setNotice(m);
+            }}
+          />
+        )}
+        {picked.length > 0 && allPicked && selectable.length < txs.length && (
+          <p className="muted bulk-note">{txs.length - selectable.length} splits and transfers in this list aren't selected; edit those one at a time.</p>
+        )}
+        {notice && picked.length === 0 && (
+          <p className="bulk-note">
+            {notice}{' '}
+            <button className="link-btn" onClick={() => setNotice('')}>Dismiss</button>
+          </p>
+        )}
         {aiOpen && <AiCategorize txIds={totals.uncategorizedIds} onClose={() => setAiOpen(false)} />}
         {/* A fresh list per filter, so switching filters draws the same rows as opening the link directly. */}
-        <TxList key={`${params.toString()}|${period.start}|${period.end}`} txs={txs} />
+        <TxList key={`${params.toString()}|${period.start}|${period.end}`} txs={txs} selection={{ selected, onToggle: toggle }} />
       </Card>
     </div>
   );
