@@ -65,7 +65,7 @@ export function LoansPage() {
       {!loans.length && <Card><p className="muted empty">No loan or mortgage accounts yet. Set account types in <Link to="/settings">Settings</Link>.</p></Card>}
       <div className="grid-2">
         {loans.map(({ a, s }) => (
-          <LoanCard key={a.id} id={a.id} name={a.name} s={s} />
+          <LoanCard key={a.id} id={a.id} name={model.accountLabel(a.id)} s={s} />
         ))}
       </div>
     </div>

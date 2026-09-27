@@ -56,6 +56,14 @@ export async function loadActualData() {
     api.getPayees(),
   ]);
   const payeeById = new Map(payees.map((p) => [p.id, p]));
+  // Bank names aren't in the public account model; the internal handler joins them in.
+  const bankById = new Map();
+  try {
+    const internal = (api.default ?? api).internal;
+    for (const a of (await internal?.send('accounts-get')) ?? []) if (a.bankName) bankById.set(a.id, a.bankName);
+  } catch {
+    /* older Actual versions: fall back to names only */
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   const outAccounts = [];
@@ -68,6 +76,7 @@ export async function loadActualData() {
       offBudget: Boolean(a.offbudget),
       closed: Boolean(a.closed),
       balance: cents(balance),
+      institution: bankById.get(a.id) || null,
     });
 
     const txs = await api.getTransactions(a.id, '1970-01-01', today);

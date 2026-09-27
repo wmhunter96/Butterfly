@@ -58,10 +58,15 @@ export function guessProperties(data: FinanceData, accountTypes: Record<string, 
 export function resolveSettings(data: FinanceData, saved: Partial<Settings> | null): Settings {
   const accountTypes: Record<string, AccountType> = {};
   for (const a of data.accounts) accountTypes[a.id] = saved?.accountTypes?.[a.id] ?? guessAccountType(a);
+  const accountBanks: Record<string, string> = {};
+  for (const a of data.accounts) {
+    accountBanks[a.id] = saved?.accountBanks?.[a.id] ?? a.institution ?? '';
+  }
   return {
     accountTypes,
     properties: saved?.properties ?? guessProperties(data, accountTypes),
     loanRates: saved?.loanRates ?? {},
+    accountBanks,
   };
 }
 
@@ -93,6 +98,14 @@ export function buildModel(data: FinanceData, settings: Settings) {
     propertyByCat,
     earliest,
     accountType: (id: string): AccountType => settings.accountTypes[id] ?? 'other',
+    bankOf: (id: string) => settings.accountBanks[id]?.trim() || '',
+    /** "Kinecta · Savings", or just the name when no bank is set or the name already says it. */
+    accountLabel(id: string) {
+      const a = accountById.get(id);
+      if (!a) return 'Unknown account';
+      const bank = settings.accountBanks[id]?.trim();
+      return bank && !a.name.toLowerCase().includes(bank.toLowerCase()) ? `${bank} · ${a.name}` : a.name;
+    },
     categoryName: (id: string | null) => (id ? catById.get(id)?.name ?? 'Unknown' : 'Uncategorized'),
     groupOf: (catId: string | null) => (catId ? groupById.get(catById.get(catId)?.groupId ?? '') : undefined),
     balanceAt(accountId: string, date: string) {

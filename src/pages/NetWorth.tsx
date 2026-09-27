@@ -75,7 +75,7 @@ export function NetWorthPage() {
           {open.has(t.id) &&
             t.accounts.map((a) => (
               <Link key={a.account.id} className="acct-row" to={'/accounts/' + encodeURIComponent(a.account.id)}>
-                <span className="name">{a.account.name}</span>
+                <span className="name">{model.accountLabel(a.account.id)}</span>
                 <span className="num"><Delta value={a.balance - a.start} liability={t.liability} /></span>
                 <span className="num">{money(Math.abs(a.balance))}</span>
               </Link>

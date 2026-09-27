@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useStore } from '../store';
 import { balanceSeries, inRange } from '../lib/finance';
-import { ACCOUNT_TYPES } from '../lib/model';
+import { ACCOUNT_TYPES, NEUTRAL, PALETTE } from '../lib/model';
 import { iso, money, moneyCompact, monthLabel, signed } from '../lib/format';
-import { Card, ChartTooltip, PageHeader, Stat } from '../components/ui';
+import { Card, ChartTooltip, PageHeader, Segmented, Stat } from '../components/ui';
 import { TxList } from '../components/TxList';
 import { groupAccountsByType, TYPE_COLORS } from './NetWorth';
 
@@ -26,24 +26,64 @@ export function AccountsPage() {
   const { model, period } = useStore();
   const today = iso(new Date());
   const yearAgo = iso(new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1));
+  const [groupBy, setGroupByState] = useState<'type' | 'bank'>(() => {
+    try {
+      return localStorage.getItem('butterfly.accountsGroupBy') === 'bank' ? 'bank' : 'type';
+    } catch {
+      return 'type';
+    }
+  });
+  const setGroupBy = (v: 'type' | 'bank') => {
+    setGroupByState(v);
+    try {
+      localStorage.setItem('butterfly.accountsGroupBy', v);
+    } catch {
+      /* ignore */
+    }
+  };
   const types = useMemo(() => groupAccountsByType(model, today, period.start), [model, today, period.start]);
+  const groups = useMemo(() => {
+    if (groupBy === 'type') return types.map((t) => ({ ...t, showBank: true }));
+    // By bank: same rows, bucketed by the bank set in Settings; accounts without one go last.
+    const rows = types.flatMap((t) => t.accounts.map((a) => ({ ...a, color: t.color })));
+    const banks = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const bank = model.bankOf(r.account.id) || 'No bank set';
+      banks.set(bank, [...(banks.get(bank) ?? []), r]);
+    }
+    return [...banks.entries()]
+      .sort(([a], [b]) => (a === 'No bank set' ? 1 : b === 'No bank set' ? -1 : a.localeCompare(b)))
+      .map(([bank, accounts], i) => ({
+        id: bank,
+        label: bank,
+        color: bank === 'No bank set' ? NEUTRAL : PALETTE[i % PALETTE.length],
+        accounts,
+        total: accounts.reduce((s, a) => s + a.balance, 0),
+        showBank: false,
+      }));
+  }, [groupBy, types, model]);
+  const typeColor = (id: string) => TYPE_COLORS[model.accountType(id)];
   return (
     <div className="page">
-      <PageHeader title="Accounts" />
-      {types.map((t) => (
-        <Card key={t.id} title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="dot" style={{ background: t.color }} />{t.label}</span>} actions={<b className="num">{money(t.total)}</b>}>
-          {t.accounts.map((a) => (
+      <PageHeader title="Accounts">
+        <Segmented value={groupBy} onChange={setGroupBy} options={[{ id: 'type', label: 'By type' }, { id: 'bank', label: 'By bank' }]} />
+      </PageHeader>
+      {groups.map((g) => (
+        <Card key={g.id} title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span className="dot" style={{ background: g.color }} />{g.label}</span>} actions={<b className="num">{money(g.total)}</b>}>
+          {g.accounts.map((a) => (
             <Link key={a.account.id} className="acct-row" to={'/accounts/' + encodeURIComponent(a.account.id)}>
               <span className="name">
-                {a.account.name}
+                {g.showBank ? model.accountLabel(a.account.id) : a.account.name}
+                {!g.showBank && <span className="muted small"> · {ACCOUNT_TYPES.find((t) => t.id === model.accountType(a.account.id))?.label}</span>}
                 {a.account.offBudget && <span className="muted small"> · off budget</span>}
               </span>
-              <Spark values={balanceSeries(model, [a.account.id], yearAgo, today).map((p) => p.value)} color={t.color} />
+              <Spark values={balanceSeries(model, [a.account.id], yearAgo, today).map((p) => p.value)} color={typeColor(a.account.id)} />
               <span className="num">{money(a.balance)}</span>
             </Link>
           ))}
         </Card>
       ))}
+      <p className="muted small">Set or fix each account's bank in <Link to="/settings">Settings</Link>.</p>
     </div>
   );
 }
@@ -61,7 +101,7 @@ export function AccountDetailPage() {
   const endBal = model.balanceAt(id, period.end);
   return (
     <div className="page">
-      <PageHeader title={account.name} />
+      <PageHeader title={model.accountLabel(id)} />
       <div className="stats">
         <Stat label="Balance" value={money(endBal)} />
         <Stat label="Change this period" value={signed(endBal - startBal)} />

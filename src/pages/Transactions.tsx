@@ -104,9 +104,13 @@ export function TransactionsPage() {
           <input type="search" placeholder="Search merchant, notes, category or amount" value={get('q')} onChange={(e) => set('q', e.target.value)} />
           <select value={account} onChange={(e) => set('account', e.target.value)} aria-label="Account">
             <option value="">All accounts</option>
-            {model.data.accounts.filter((a) => !a.closed).map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
+            {model.data.accounts
+              .filter((a) => !a.closed)
+              .map((a) => ({ id: a.id, label: model.accountLabel(a.id) }))
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map((a) => (
+                <option key={a.id} value={a.id}>{a.label}</option>
+              ))}
           </select>
           <select
             value={category ? 'c:' + category : group ? 'g:' + group : property ? 'p:' + property.id : ''}

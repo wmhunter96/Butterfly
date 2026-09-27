@@ -81,7 +81,7 @@ export function TxList({ txs, pageSize = 150, showAccount = true }: { txs: Trans
         </span>
       );
     if (t.startingBalance) return <span className="transfer-tag">Starting balance</span>;
-    if (t.transferAccountId && !t.categoryId) return <span className="transfer-tag">Transfer · {model.accountById.get(t.transferAccountId)?.name}</span>;
+    if (t.transferAccountId && !t.categoryId) return <span className="transfer-tag">Transfer · {model.accountLabel(t.transferAccountId)}</span>;
     if (acct?.offBudget && !t.categoryId) return <span className="transfer-tag">Off budget</span>;
     return <CategorySelect tx={t} />;
   };
@@ -106,7 +106,7 @@ export function TxList({ txs, pageSize = 150, showAccount = true }: { txs: Trans
                 </div>
               </div>
               <div className="tx-cat">{catCell(t)}</div>
-              {showAccount ? <div className="tx-account">{model.accountById.get(t.accountId)?.name}</div> : <div className="tx-account" />}
+              {showAccount ? <div className="tx-account" title={model.accountLabel(t.accountId)}>{model.accountLabel(t.accountId)}</div> : <div className="tx-account" />}
               <div className={'num ' + (t.amount > 0 ? 'pos' : '')}>{money(t.amount)}</div>
             </div>
           ))}

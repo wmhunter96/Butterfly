@@ -340,3 +340,5 @@ td { padding: 9px 8px; border-bottom: 1px solid var(--grid); }
   .cat-count { display: none; }
   .editable input { width: 100%; }
 }
+.settings-row.accounts { grid-template-columns: minmax(0, 1fr) 180px 220px; }
+@media (max-width: 760px) { .settings-row.accounts { grid-template-columns: minmax(0, 1fr); } }

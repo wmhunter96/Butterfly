@@ -73,7 +73,7 @@ export function SettingsPage() {
                   {accounts.map((a) => (
                     <label key={a.id}>
                       <input type="checkbox" checked={p.valueAccountIds.includes(a.id)} onChange={() => setProp(i, { valueAccountIds: toggleIn(p.valueAccountIds, a.id) })} />
-                      {a.name}
+                      {model.accountLabel(a.id)}
                     </label>
                   ))}
                 </div>
@@ -84,7 +84,7 @@ export function SettingsPage() {
                   {accounts.map((a) => (
                     <label key={a.id}>
                       <input type="checkbox" checked={p.loanAccountIds.includes(a.id)} onChange={() => setProp(i, { loanAccountIds: toggleIn(p.loanAccountIds, a.id) })} />
-                      {a.name}
+                      {model.accountLabel(a.id)}
                     </label>
                   ))}
                 </div>
@@ -103,14 +103,32 @@ export function SettingsPage() {
       </Card>
 
       <Card title="Accounts">
-        <p className="muted small" style={{ marginTop: 0 }}>Types decide where each account shows up on Net worth, Accounts and Loans. They were guessed from account names.</p>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Bank is shown in front of the account name everywhere (like “Kinecta · Savings”) and lets you group the Accounts page by bank. It's filled in from SimpleFIN when Actual knows it. Types decide where each account shows up on Net worth, Accounts and Loans; they were guessed from account names.
+        </p>
+        <datalist id="bank-names">
+          {[...new Set(Object.values(draft.accountBanks).filter(Boolean))].sort().map((b) => (
+            <option key={b} value={b} />
+          ))}
+        </datalist>
         {accounts.map((a) => {
           const type = draft.accountTypes[a.id];
           return (
-            <div className="settings-row" key={a.id}>
+            <div className="settings-row accounts" key={a.id}>
               <span>
                 {a.name} <span className="muted small">{money(a.balance)}</span>
               </span>
+              <input
+                type="text"
+                list="bank-names"
+                placeholder="Bank"
+                aria-label={'Bank for ' + a.name}
+                value={draft.accountBanks[a.id] ?? ''}
+                onChange={(e) => {
+                  // Keep an empty string so clearing a bank also hides the one SimpleFIN reported.
+                  setDraft({ ...draft, accountBanks: { ...draft.accountBanks, [a.id]: e.target.value } });
+                }}
+              />
               <div style={{ display: 'flex', gap: 6 }}>
                 <select value={type} style={{ flex: 1 }} onChange={(e) => setDraft({ ...draft, accountTypes: { ...draft.accountTypes, [a.id]: e.target.value as AccountType } })}>
                   {ACCOUNT_TYPES.map((t) => (

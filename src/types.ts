@@ -15,7 +15,7 @@ export type Transaction = {
   splits?: Split[];
 };
 
-export type Account = { id: string; name: string; offBudget: boolean; closed: boolean; balance: number };
+export type Account = { id: string; name: string; offBudget: boolean; closed: boolean; balance: number; institution?: string | null };
 export type CategoryGroup = { id: string; name: string; isIncome: boolean; hidden: boolean };
 export type Category = { id: string; name: string; groupId: string; isIncome: boolean; hidden: boolean };
 
@@ -46,6 +46,7 @@ export type Settings = {
   accountTypes: Record<string, AccountType>;
   properties: Property[];
   loanRates: Record<string, number>; // accountId -> APR percent
+  accountBanks: Record<string, string>; // accountId -> bank / institution shown next to the name
 };
 
 export type Line = { tx: Transaction; categoryId: string | null; amount: number };

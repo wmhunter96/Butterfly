@@ -12,19 +12,19 @@ function rng(seed) {
 }
 
 const ACCOUNTS = [
-  ['chk', 'Joint Checking', false, 8000],
-  ['sav', 'High-Yield Savings', false, 30000],
-  ['cc1', 'Sapphire Preferred', false, 0],
-  ['cc2', 'Blue Cash Card', false, 0],
-  ['brk', 'Brokerage', true, 60000],
-  ['k401', '401(k)', true, 140000],
-  ['ira', 'Roth IRA', true, 45000],
-  ['home', '905 Birch Ln (Home value)', true, 520000],
-  ['rental', '27 Harbor Rd (Property value)', true, 310000],
-  ['mort1', '905 Birch Ln Mortgage', true, -398000],
-  ['mort2', '27 Harbor Rd Mortgage', true, -215000],
-  ['auto', 'Auto Loan', true, -24000],
-  ['stu', 'Student Loan', true, -31000],
+  ['chk', 'Joint Checking', false, 8000, 'Chase'],
+  ['sav', 'High-Yield Savings', false, 30000, 'Ally Bank'],
+  ['cc1', 'Sapphire Preferred', false, 0, 'Chase'],
+  ['cc2', 'Blue Cash Card', false, 0, 'American Express'],
+  ['brk', 'Brokerage', true, 60000, 'Fidelity'],
+  ['k401', '401(k)', true, 140000, 'Fidelity'],
+  ['ira', 'Roth IRA', true, 45000, 'Vanguard'],
+  ['home', '905 Birch Ln (Home value)', true, 520000, null],
+  ['rental', '27 Harbor Rd (Property value)', true, 310000, null],
+  ['mort1', '905 Birch Ln Mortgage', true, -398000, 'Rocket Mortgage'],
+  ['mort2', '27 Harbor Rd Mortgage', true, -215000, 'Chase'],
+  ['auto', 'Auto Loan', true, -24000, 'Toyota Financial'],
+  ['stu', 'Student Loan', true, -31000, 'Nelnet'],
 ];
 
 const GROUPS = {
@@ -255,10 +255,11 @@ export function buildDemoData(now = new Date()) {
   }
 
   txs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const accounts = ACCOUNTS.map(([id, name, offBudget]) => ({
+  const accounts = ACCOUNTS.map(([id, name, offBudget, , institution]) => ({
     id,
     name,
     offBudget,
+    institution,
     closed: false,
     balance: Math.round(txs.filter((t) => t.accountId === id).reduce((s, t) => s + t.amount, 0) * 100) / 100,
   }));
