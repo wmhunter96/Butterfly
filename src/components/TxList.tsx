@@ -89,8 +89,9 @@ export function TxList({ txs, pageSize = 150, showAccount = true }: { txs: Trans
   if (!txs.length) return <p className="muted empty">No transactions match.</p>;
   return (
     <div>
-      {days.map((d) => (
-        <div key={d.date}>
+      {days.map((d, i) => (
+        // A date can repeat if the list isn't sorted, so the index keeps keys unique.
+        <div key={d.date + ':' + i}>
           <div className="tx-day">
             <span>{dayLabel(d.date)}</span>
             <span className="num">{money(d.total)}</span>

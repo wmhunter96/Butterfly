@@ -96,6 +96,9 @@ export async function loadActualData() {
     }
   }
 
+  // Newest first across all accounts, like the demo data; the UI groups consecutive rows by day.
+  transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
   return {
     meta: { source: 'actual', syncedAt: new Date().toISOString() },
     accounts: outAccounts,
