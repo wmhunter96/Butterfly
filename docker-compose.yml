@@ -1,0 +1,12 @@
+services:
+  butterfly:
+    image: ghcr.io/wmhunter96/butterfly:latest
+    # build: .   # uncomment to build locally instead of pulling
+    container_name: butterfly
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Settings (property pages, account types) and Actual's local cache
+      - /mnt/user/appdata/butterfly:/config
+    env_file: .env

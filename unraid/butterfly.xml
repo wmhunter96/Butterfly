@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Butterfly</Name>
+  <Repository>ghcr.io/wmhunter96/butterfly:latest</Repository>
+  <Registry>https://github.com/wmhunter96/Butterfly/pkgs/container/butterfly</Registry>
+  <Branch/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/wmhunter96/Butterfly/issues</Support>
+  <Project>https://github.com/wmhunter96/Butterfly</Project>
+  <Overview>Butterfly is a self-hosted, Monarch-style personal finance dashboard that reads from your Actual Budget server (fed by SimpleFIN bank sync): cash flow Sankey, spending, transactions, net worth, accounts, loans and a page per property. Runs with demo data until you fill in the Actual settings.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/wmhunter96/Butterfly/main/unraid/butterfly.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/wmhunter96/Butterfly/main/unraid/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>A running Actual Budget server (for example the actualbudget/actual-server container), with SimpleFIN set up inside Actual for bank sync.</Requires>
+  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="Port for the Butterfly web interface" Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/butterfly" Mode="rw" Description="Butterfly settings (property pages, account types) and the local copy of your Actual budget" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/butterfly</Config>
+  <Config Name="Actual Server URL" Target="ACTUAL_SERVER_URL" Default="" Mode="" Description="URL of your Actual Budget server, e.g. http://192.168.1.10:5006. Leave empty for demo data." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Actual Password" Target="ACTUAL_PASSWORD" Default="" Mode="" Description="The password you use to log in to Actual" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Actual Sync ID" Target="ACTUAL_SYNC_ID" Default="" Mode="" Description="In Actual: Settings, Show advanced settings, Sync ID" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Actual Encryption Password" Target="ACTUAL_ENCRYPTION_PASSWORD" Default="" Mode="" Description="Only if your budget file uses end-to-end encryption" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="Butterfly Password" Target="APP_PASSWORD" Default="" Mode="" Description="Optional: require this password to open Butterfly" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Cache Seconds" Target="CACHE_SECONDS" Default="60" Mode="" Description="How long to reuse data from Actual between page loads" Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
+</Container>
