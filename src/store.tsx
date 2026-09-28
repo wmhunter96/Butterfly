@@ -14,6 +14,8 @@ type Store = {
   setCategory: (txId: string, categoryId: string | null) => Promise<void>;
   /** Make a transaction a transfer to another account (linking the matching transaction there), then reload. */
   markTransfer: (txId: string, accountId: string) => Promise<void>;
+  /** Split a transaction across categories (two or more lines adding up to its amount), or with zero or one line undo a split; then reload. */
+  splitTransaction: (txId: string, lines: { id?: string; categoryId: string | null; amount: number; notes: string }[]) => Promise<void>;
   /** Add, rename, move or delete a category or group in Actual, then reload. Resolves to the id of anything created. */
   changeCategories: (method: 'POST' | 'PATCH' | 'DELETE', path: string, body: object) => Promise<string | null>;
   /** Reflect categories written elsewhere (AI review) without reloading from Actual. */
@@ -133,6 +135,10 @@ export function StoreProvider({ children, session, onSignedOut }: { children: Re
         if (!confirm(`${name} has no matching transaction within 5 days. Mark it as a transfer anyway? Actual will add the other side to ${name}.`)) return;
         await api(url, { method: 'POST', body: JSON.stringify({ accountId, create: true }) });
       }
+      await load(true);
+    },
+    async splitTransaction(txId, lines) {
+      await api('/api/transactions/' + encodeURIComponent(txId) + '/split', { method: 'PUT', body: JSON.stringify({ lines }) });
       await load(true);
     },
     async changeCategories(method, path, body) {

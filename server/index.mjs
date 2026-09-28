@@ -13,11 +13,13 @@ import {
   loadActualData,
   makeTransfer,
   moveCategory,
+  removeTransactionSplit,
   renameCategory,
   renameCategoryGroup,
   setPayeeCategoryRule,
   setTransactionCategories,
   setTransactionCategory,
+  setTransactionSplits,
   syncActual,
   syncBanks,
 } from './actual.mjs';
@@ -243,6 +245,61 @@ app.post('/api/transactions/bulk', async (req, res) => {
     res.json({ ok: true, updated: changes.length, skipped });
   } catch (err) {
     console.error('Bulk edit failed:', err);
+    res.status(err.status ?? 502).json({ error: String(err?.message || err) });
+  }
+});
+
+/**
+ * Splits one transaction across categories. Two or more lines make (or replace) a split, and their
+ * amounts must add up to the transaction's; zero or one line turns a split back into a single
+ * transaction with that line's category (or uncategorized).
+ */
+app.put('/api/transactions/:id/split', async (req, res) => {
+  try {
+    const data = await getData();
+    const tx = data.transactions.find((t) => t.id === req.params.id);
+    if (!tx) throw badRequest('Transaction not found; refresh and try again');
+    if (tx.startingBalance || (tx.transferAccountId && !tx.categoryId && !tx.splits)) throw badRequest("Transfers and starting balances can't be split");
+    if (data.accounts.find((a) => a.id === tx.accountId)?.offBudget) throw badRequest("Off-budget transactions can't be split");
+    if (tx.splits?.some((s) => s.transferAccountId)) throw badRequest('This split has a transfer line; edit it in Actual');
+    const cats = new Set(data.categories.map((c) => c.id));
+    const known = new Set((tx.splits ?? []).map((s) => s.id).filter(Boolean));
+    const raw = Array.isArray(req.body?.lines) ? req.body.lines : [];
+    const lines = raw.map((l) => {
+      const categoryId = l?.categoryId ?? null;
+      if (categoryId !== null && !cats.has(categoryId)) throw badRequest('Category not found; refresh and try again');
+      const amountCents = Math.round(Number(l?.amount) * 100);
+      if (!Number.isFinite(amountCents)) throw badRequest('Each line needs an amount');
+      const id = typeof l?.id === 'string' && known.has(l.id) ? l.id : null;
+      return { id, categoryId, amountCents, notes: String(l?.notes ?? '').slice(0, 500) };
+    });
+
+    if (lines.length >= 2) {
+      const total = Math.round(tx.amount * 100);
+      const sum = lines.reduce((a, l) => a + l.amountCents, 0);
+      if (sum !== total) throw badRequest(`The lines add up to ${(sum / 100).toFixed(2)} but the transaction is ${(total / 100).toFixed(2)}`);
+      if (lines.some((l) => !l.amountCents)) throw badRequest('Remove lines with no amount');
+      if (DEMO) {
+        tx.categoryId = null;
+        tx.splits = lines.map((l) => ({ categoryId: l.categoryId, amount: l.amountCents / 100, notes: l.notes }));
+      } else {
+        await setTransactionSplits(tx.id, tx.accountId, tx.date, lines);
+        await getData(true);
+      }
+    } else {
+      if (!tx.splits) throw badRequest('Add at least two lines to split this transaction');
+      const categoryId = lines[0]?.categoryId ?? null;
+      if (DEMO) {
+        delete tx.splits;
+        tx.categoryId = categoryId;
+      } else {
+        await removeTransactionSplit(tx.id, tx.accountId, tx.date, categoryId);
+        await getData(true);
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Split failed:', err);
     res.status(err.status ?? 502).json({ error: String(err?.message || err) });
   }
 });

@@ -219,6 +219,28 @@ span.tx-check { display: inline-block; cursor: default; }
 .tx-row select:hover { border-color: var(--border); background: var(--surface); }
 .tx-row select.uncat { color: var(--accent); }
 .tx-account { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-edit { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.cat-edit select { flex: 1; min-width: 0; }
+.split-btn { flex: none; width: 26px; height: 26px; opacity: 0; border-color: transparent; background: transparent; color: var(--muted); }
+.tx-row:hover .split-btn, .split-btn:focus-visible { opacity: 1; }
+.split-btn:hover { color: var(--text); border-color: var(--border); }
+@media (hover: none) { .split-btn { opacity: 1; } }
+.split-summary { border: 1px solid transparent; background: none; font: inherit; color: inherit; text-align: left; padding: 4px 6px; border-radius: 8px; cursor: pointer; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-summary:hover { border-color: var(--border); background: var(--surface); }
+.split-modal { width: min(600px, 100%); }
+.split-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.split-head .num { font-size: 16px; }
+.split-lines { display: grid; gap: 6px; }
+.split-line { display: grid; grid-template-columns: minmax(0, 1.6fr) 96px minmax(0, 1.2fr) 30px; gap: 6px; align-items: center; }
+.split-line select, .split-line input { width: 100%; height: 32px; }
+.split-line select.uncat { color: var(--accent); }
+.split-amount { text-align: right; font-variant-numeric: tabular-nums; }
+.split-amount.bad { border-color: var(--neg); }
+.split-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+.split-tools .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 0; font-size: 12px; }
+.split-remaining { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+.split-remove { margin-right: auto; }
+@media (max-width: 560px) { .split-line { grid-template-columns: minmax(0, 1fr) 90px 30px; } .split-notes { grid-column: 1 / 3; grid-row: 2; } }
 .split-tag { font-size: 11px; background: var(--hover); border-radius: 5px; padding: 1px 6px; margin-right: 6px; color: var(--text-2); }
 .avatar { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font-size: 12px; font-weight: 600; flex: none; }
 .transfer-tag { font-size: 11px; color: var(--muted); }

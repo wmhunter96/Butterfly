@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
+import { Split } from 'lucide-react';
 import type { Transaction } from '../types';
 import { useStore } from '../store';
 import type { Model } from '../lib/model';
 import { dayLabel, money } from '../lib/format';
 import { Avatar } from './ui';
+import { SplitEditor } from './SplitEditor';
 
 /** Select value prefix for "this is a transfer to/from that account" (shared with the AI review). */
 export const TRANSFER = 'transfer:';
@@ -15,8 +17,15 @@ export function editable(model: Model, t: Transaction) {
   return true;
 }
 
-/** Visible categories by group, then open accounts (other than excludeAccountId) as transfer targets. */
-export function CategoryOptions({ excludeAccountId }: { excludeAccountId?: string }) {
+/** Whether a row can be split across categories (or its split edited) in Butterfly. */
+export function splittable(model: Model, t: Transaction) {
+  if (t.startingBalance || !t.amount || model.accountById.get(t.accountId)?.offBudget) return false;
+  if (t.splits) return !t.splits.some((s) => s.transferAccountId);
+  return !(t.transferAccountId && !t.categoryId);
+}
+
+/** Visible categories by group, then (unless transfers is false) open accounts other than excludeAccountId as transfer targets. */
+export function CategoryOptions({ excludeAccountId, transfers = true }: { excludeAccountId?: string; transfers?: boolean }) {
   const { model } = useStore();
   const groups = useMemo(
     () => model.data.categoryGroups.filter((g) => !g.hidden).map((g) => ({ g, cats: model.data.categories.filter((c) => c.groupId === g.id && !c.hidden) })),
@@ -34,13 +43,15 @@ export function CategoryOptions({ excludeAccountId }: { excludeAccountId?: strin
           ))}
         </optgroup>
       ))}
-      <optgroup label="Transfer to or from account">
-        {others.map((a) => (
-          <option key={a.id} value={TRANSFER + a.id}>
-            {model.accountLabel(a.id)}
-          </option>
-        ))}
-      </optgroup>
+      {transfers && (
+        <optgroup label="Transfer to or from account">
+          {others.map((a) => (
+            <option key={a.id} value={TRANSFER + a.id}>
+              {model.accountLabel(a.id)}
+            </option>
+          ))}
+        </optgroup>
+      )}
     </>
   );
 }
@@ -79,6 +90,7 @@ type Selection = { selected: Set<string>; onToggle: (id: string, range: boolean)
 export function TxList({ txs, pageSize = 150, showAccount = true, selection }: { txs: Transaction[]; pageSize?: number; showAccount?: boolean; selection?: Selection }) {
   const { model } = useStore();
   const [limit, setLimit] = useState(pageSize);
+  const [splitting, setSplitting] = useState<Transaction | null>(null);
   const shown = txs.slice(0, limit);
   const days = useMemo(() => {
     const out: { date: string; txs: Transaction[]; total: number }[] = [];
@@ -93,17 +105,35 @@ export function TxList({ txs, pageSize = 150, showAccount = true, selection }: {
 
   const catCell = (t: Transaction) => {
     const acct = model.accountById.get(t.accountId);
-    if (t.splits)
-      return (
-        <span>
+    if (t.splits) {
+      const summary = (
+        <>
           <span className="split-tag">Split</span>
           {[...new Set(t.splits.map((s) => model.categoryName(s.categoryId)))].join(', ')}
-        </span>
+        </>
       );
+      const detail = t.splits.map((s) => `${model.categoryName(s.categoryId)}: ${money(s.amount)}${s.notes ? ` (${s.notes})` : ''}`).join('\n');
+      return splittable(model, t) ? (
+        <button className="split-summary" onClick={() => setSplitting(t)} title={detail + '\n\nClick to edit the split'}>
+          {summary}
+        </button>
+      ) : (
+        <span title={detail + '\n\nThis split has a transfer line; edit it in Actual'}>{summary}</span>
+      );
+    }
     if (t.startingBalance) return <span className="transfer-tag">Starting balance</span>;
     if (t.transferAccountId && !t.categoryId) return <span className="transfer-tag">Transfer · {model.accountLabel(t.transferAccountId)}</span>;
     if (acct?.offBudget && !t.categoryId) return <span className="transfer-tag">Off budget</span>;
-    return <CategorySelect tx={t} />;
+    return (
+      <div className="cat-edit">
+        <CategorySelect tx={t} />
+        {splittable(model, t) && (
+          <button className="icon-btn subtle split-btn" onClick={() => setSplitting(t)} aria-label={'Split ' + (t.payee || 'transaction')} title="Split across categories">
+            <Split size={14} />
+          </button>
+        )}
+      </div>
+    );
   };
 
   if (!txs.length) return <p className="muted empty">No transactions match.</p>;
@@ -149,6 +179,7 @@ export function TxList({ txs, pageSize = 150, showAccount = true, selection }: {
           ))}
         </div>
       ))}
+      {splitting && <SplitEditor tx={splitting} onClose={() => setSplitting(null)} />}
       {txs.length > limit && (
         <button className="link-btn" onClick={() => setLimit(limit + pageSize)}>
           Show more ({txs.length - limit} remaining)

@@ -1,4 +1,12 @@
-export type Split = { categoryId: string | null; amount: number; notes: string };
+export type Split = {
+  /** Actual's id for the line; demo splits and new lines have none. */
+  id?: string;
+  categoryId: string | null;
+  amount: number;
+  notes: string;
+  /** Set when the line is a transfer to another account (made in Actual; Butterfly doesn't edit those). */
+  transferAccountId?: string | null;
+};
 
 export type Transaction = {
   id: string;

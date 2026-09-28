@@ -1,5 +1,6 @@
 // Reads a budget from a self-hosted Actual Budget server and normalizes it
 // into the shape the Butterfly UI consumes (see src/types.ts).
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -99,7 +100,13 @@ export async function loadActualData() {
         startingBalance: Boolean(t.starting_balance_flag),
         cleared: Boolean(t.cleared),
         splits: subs.length
-          ? subs.map((s) => ({ categoryId: s.category || null, amount: cents(s.amount), notes: s.notes || '' }))
+          ? subs.map((s) => ({
+              id: s.id,
+              categoryId: s.category || null,
+              amount: cents(s.amount),
+              notes: s.notes || '',
+              transferAccountId: (s.payee && payeeById.get(s.payee)?.transfer_acct) || null,
+            }))
           : undefined,
       });
     }
@@ -181,6 +188,63 @@ export async function makeTransfer({ txId, fromAccountId, toAccountId, counterpa
   } else {
     await internal.send('transactions-batch-update', { updated: [{ id: txId, payee: toPayee }] });
   }
+}
+
+/** The transaction with its split lines, straight from Actual. */
+async function fetchTransaction(id, accountId, date) {
+  const t = (await api.getTransactions(accountId, date, date)).find((x) => x.id === id);
+  if (!t) throw new Error('Transaction not found; refresh and try again');
+  return t;
+}
+
+/**
+ * Splits a transaction into lines (each { id?, categoryId, amountCents, notes }), or replaces the lines of
+ * an existing split. Lines that keep their id are updated in place; the rest are added or removed.
+ * This builds the same change Actual's own split makes, but through the awaited batch update:
+ * api.updateTransaction returns before a split is written.
+ */
+export async function setTransactionSplits(id, accountId, date, lines) {
+  await connect();
+  const t = await fetchTransaction(id, accountId, date);
+  const old = (t.subtransactions || []).filter((s) => !s.tombstone);
+  const kept = new Set(lines.map((l) => l.id).filter(Boolean));
+  const fields = (l, i) => ({ category: l.categoryId, amount: l.amountCents, notes: l.notes || null, sort_order: -(i + 1) });
+  await internal.send('transactions-batch-update', {
+    deleted: old.filter((s) => !kept.has(s.id)).map((s) => ({ id: s.id })),
+    added: lines
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => !l.id)
+      .map(({ l, i }) => ({
+        id: crypto.randomUUID(),
+        is_parent: false,
+        is_child: true,
+        parent_id: id,
+        account: t.account,
+        date: t.date,
+        payee: t.payee ?? null,
+        cleared: t.cleared,
+        reconciled: t.reconciled,
+        error: null,
+        ...fields(l, i),
+      })),
+    updated: [
+      { id, is_parent: true, category: null, error: null },
+      ...lines.map((l, i) => ({ l, i })).filter(({ l }) => l.id).map(({ l, i }) => ({ id: l.id, ...fields(l, i) })),
+    ],
+  });
+  await api.sync();
+}
+
+/** Turns a split back into a single transaction with one category, removing its lines. */
+export async function removeTransactionSplit(id, accountId, date, categoryId) {
+  await connect();
+  const t = await fetchTransaction(id, accountId, date);
+  const children = (t.subtransactions || []).filter((s) => !s.tombstone);
+  await internal.send('transactions-batch-update', {
+    deleted: children.map((c) => ({ id: c.id })),
+    updated: [{ id, is_parent: false, category: categoryId, error: null }],
+  });
+  await api.sync();
 }
 
 export async function syncActual() {
