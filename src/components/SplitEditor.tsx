@@ -48,10 +48,28 @@ export function SplitEditor({ tx, onClose }: { tx: Transaction; onClose: () => v
     const extra = total - base * lines.length;
     setLines(lines.map((l, i) => ({ ...l, amount: fromCents(base + (i < extra ? 1 : 0)) })));
   };
+  const empty = lines.filter((l) => !l.amount.trim());
+  /**
+   * Lines with no amount yet share what's left evenly. When every line has an amount, the difference
+   * (tax, shipping, a discount) is spread across them in proportion to their amounts.
+   */
   const fillRest = () => {
-    // The first line with no amount yet takes the rest, or the last line when every one has an amount.
-    const target = lines.find((l) => !l.amount.trim()) ?? lines[lines.length - 1];
-    update(target.key, { amount: fromCents((toCents(target.amount) ?? 0) + remaining) });
+    setError('');
+    const targets = empty.length ? empty : lines;
+    const weights = targets.map((l) => (empty.length ? 1 : Math.abs(toCents(l.amount) ?? 0)));
+    const sum = weights.reduce((a, w) => a + w, 0) || (weights.fill(1), weights.length);
+    // Round down, then hand the leftover pennies to the lines that lost the most to rounding.
+    const exact = weights.map((w) => (remaining * w) / sum);
+    const share = exact.map((x) => Math.trunc(x));
+    let pennies = remaining - share.reduce((a, x) => a + x, 0);
+    const order = exact.map((x, i) => i).sort((a, b) => Math.abs(exact[b] - share[b]) - Math.abs(exact[a] - share[a]));
+    for (const i of order) {
+      if (!pennies) break;
+      share[i] += Math.sign(pennies);
+      pennies -= Math.sign(pennies);
+    }
+    const add = new Map(targets.map((l, i) => [l.key, share[i]]));
+    setLines(lines.map((l) => (add.has(l.key) ? { ...l, amount: fromCents((toCents(l.amount) ?? 0) + add.get(l.key)!) } : l)));
   };
 
   const save = async (drafts: Draft[]) => {
@@ -128,8 +146,12 @@ export function SplitEditor({ tx, onClose }: { tx: Transaction; onClose: () => v
           <span className={'split-remaining ' + (remaining === 0 ? 'pos' : 'neg')}>
             {remaining === 0 ? 'Fully assigned' : remaining > 0 ? `${money(remaining / 100)} left to assign` : `${money(-remaining / 100)} over`}
             {remaining !== 0 && !invalid && (
-              <button className="link-btn" onClick={fillRest}>
-                {remaining > 0 ? 'Fill in' : 'Take off'}
+              <button
+                className="link-btn"
+                onClick={fillRest}
+                title={empty.length ? 'Split what is left evenly across the empty lines' : 'Spread what is left (tax, shipping) across the lines in proportion to their amounts'}
+              >
+                {empty.length ? 'Fill in' : remaining > 0 ? 'Spread across lines' : 'Take off across lines'}
               </button>
             )}
           </span>
