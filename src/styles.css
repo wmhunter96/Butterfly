@@ -209,7 +209,7 @@ span.tx-check { display: inline-block; cursor: default; }
 .bulk-bar select { flex: 1; min-width: 180px; max-width: 320px; height: 32px; }
 .bulk-note { font-size: 12px; margin: 0 0 8px; }
 .tx-day { display: flex; justify-content: space-between; padding: 8px 8px; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--text-2); border-bottom: 1px solid var(--border); }
-.tx-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 110px; gap: 12px; align-items: center; padding: 8px; border-bottom: 1px solid var(--grid); }
+.tx-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 140px; gap: 12px; align-items: center; padding: 8px; border-bottom: 1px solid var(--grid); }
 .tx-row:hover { background: var(--hover); }
 .tx-merchant { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .tx-merchant > div { min-width: 0; }
@@ -221,10 +221,13 @@ span.tx-check { display: inline-block; cursor: default; }
 .tx-account { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-edit { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .cat-edit select { flex: 1; min-width: 0; }
-.split-btn { flex: none; width: 26px; height: 26px; opacity: 0; border-color: transparent; background: transparent; color: var(--muted); }
-.tx-row:hover .split-btn, .split-btn:focus-visible { opacity: 1; }
+.split-btn, .row-btn { flex: none; width: 26px; height: 26px; opacity: 0; border-color: transparent; background: transparent; color: var(--muted); }
+.tx-row:hover .split-btn, .split-btn:focus-visible, .tx-row:hover .row-btn, .row-btn:focus-visible { opacity: 1; }
 .split-btn:hover { color: var(--text); border-color: var(--border); }
-@media (hover: none) { .split-btn { opacity: 1; } }
+.row-btn:hover { color: var(--neg); border-color: var(--border); }
+@media (hover: none) { .split-btn, .row-btn { opacity: 1; } }
+.tx-amount { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.pending-tag { margin-left: 6px; color: var(--muted); font-weight: 500; vertical-align: 1px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
 .split-summary { border: 1px solid transparent; background: none; font: inherit; color: inherit; text-align: left; padding: 4px 6px; border-radius: 8px; cursor: pointer; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .split-summary:hover { border-color: var(--border); background: var(--surface); }
 .split-modal { width: min(600px, 100%); }

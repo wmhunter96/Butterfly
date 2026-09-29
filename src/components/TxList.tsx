@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Split } from 'lucide-react';
+import { Split, Trash2 } from 'lucide-react';
 import type { Transaction } from '../types';
 import { useStore } from '../store';
 import type { Model } from '../lib/model';
@@ -22,6 +22,17 @@ export function splittable(model: Model, t: Transaction) {
   if (t.startingBalance || !t.amount || model.accountById.get(t.accountId)?.offBudget) return false;
   if (t.splits) return !t.splits.some((s) => s.transferAccountId);
   return !(t.transferAccountId && !t.categoryId);
+}
+
+/** Asks before deleting; for a transfer, says the other side stays. */
+export function confirmDelete(model: Model, txs: Transaction[]) {
+  const what =
+    txs.length === 1
+      ? `Delete ${txs[0].payee || 'this transaction'} (${money(txs[0].amount)} on ${txs[0].date}) from ${model.accountLabel(txs[0].accountId)}?`
+      : `Delete ${txs.length} transactions?`;
+  const transfers = txs.filter((t) => t.transferAccountId).length;
+  const note = transfers ? ` The matching transaction on the other account stays, as uncategorized.` : '';
+  return confirm(`${what}${note} This removes ${txs.length === 1 ? 'it' : 'them'} from Actual and can't be undone here.`);
 }
 
 /** Visible categories by group, then (unless transfers is false) open accounts other than excludeAccountId as transfer targets. */
@@ -88,8 +99,9 @@ export function CategorySelect({ tx }: { tx: Transaction }) {
 type Selection = { selected: Set<string>; onToggle: (id: string, range: boolean) => void };
 
 export function TxList({ txs, pageSize = 150, showAccount = true, selection }: { txs: Transaction[]; pageSize?: number; showAccount?: boolean; selection?: Selection }) {
-  const { model } = useStore();
+  const { model, deleteTransactions } = useStore();
   const [limit, setLimit] = useState(pageSize);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [splitting, setSplitting] = useState<Transaction | null>(null);
   const shown = txs.slice(0, limit);
   const days = useMemo(() => {
@@ -136,6 +148,18 @@ export function TxList({ txs, pageSize = 150, showAccount = true, selection }: {
     );
   };
 
+  const remove = async (t: Transaction) => {
+    if (!confirmDelete(model, [t])) return;
+    setDeleting(t.id);
+    try {
+      await deleteTransactions([t.id]);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   if (!txs.length) return <p className="muted empty">No transactions match.</p>;
   return (
     <div>
@@ -168,13 +192,29 @@ export function TxList({ txs, pageSize = 150, showAccount = true, selection }: {
                   ))}
                 <Avatar name={t.payee || '?'} />
                 <div>
-                  <div className="name" title={t.notes || t.payee}>{t.payee || '(no payee)'}</div>
+                  <div className="name" title={t.notes || t.payee}>
+                    {t.payee || '(no payee)'}
+                    {!t.cleared && !t.startingBalance && <span className="pending-tag" title="Not cleared yet; bank sync imports pending transactions this way">Pending</span>}
+                  </div>
                   <div className="sub">{t.splits ? 'Split' : t.transferAccountId && !t.categoryId ? 'Transfer' : model.categoryName(t.categoryId)}</div>
                 </div>
               </div>
               <div className="tx-cat">{catCell(t)}</div>
               {showAccount ? <div className="tx-account" title={model.accountLabel(t.accountId)}>{model.accountLabel(t.accountId)}</div> : <div className="tx-account" />}
-              <div className={'num ' + (t.amount > 0 ? 'pos' : '')}>{money(t.amount)}</div>
+              <div className="tx-amount">
+                {!t.startingBalance && (
+                  <button
+                    className="icon-btn subtle row-btn"
+                    onClick={() => remove(t)}
+                    disabled={deleting === t.id}
+                    aria-label={'Delete ' + (t.payee || 'transaction')}
+                    title="Delete transaction"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+                <span className={'num ' + (t.amount > 0 ? 'pos' : '')}>{money(t.amount)}</span>
+              </div>
             </div>
           ))}
         </div>

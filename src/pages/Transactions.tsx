@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
 import { useStore } from '../store';
+import type { Transaction } from '../types';
 import { inRange, isUncategorized } from '../lib/finance';
 import { money } from '../lib/format';
 import { Card, PageHeader } from '../components/ui';
@@ -14,7 +15,35 @@ const FILTERS = [
   { id: 'uncategorized', label: 'Uncategorized' },
   { id: 'split', label: 'Split' },
   { id: 'transfers', label: 'Transfers' },
+  { id: 'duplicates', label: 'Possible duplicates' },
 ];
+
+const DAY = 86400000;
+
+/**
+ * Ids of transactions that share an account and amount with another one within 7 days: the same
+ * window Actual uses when it matches bank sync imports to existing transactions. Starting balances aside.
+ */
+function possibleDuplicates(txs: Transaction[]) {
+  const byKey = new Map<string, Transaction[]>();
+  for (const t of txs) {
+    if (t.startingBalance || !t.amount) continue;
+    const k = t.accountId + '|' + Math.round(t.amount * 100);
+    byKey.set(k, [...(byKey.get(k) ?? []), t]);
+  }
+  const out = new Set<string>();
+  for (const list of byKey.values()) {
+    if (list.length < 2) continue;
+    const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+    for (let i = 1; i < sorted.length; i++) {
+      if (Date.parse(sorted[i].date) - Date.parse(sorted[i - 1].date) <= 7 * DAY) {
+        out.add(sorted[i].id);
+        out.add(sorted[i - 1].id);
+      }
+    }
+  }
+  return out;
+}
 
 export function TransactionsPage() {
   const { model, period } = useStore();
@@ -46,12 +75,15 @@ export function TransactionsPage() {
     return null;
   }, [model, category, group, property]);
 
+  const dupes = useMemo(() => (filter === 'duplicates' ? possibleDuplicates(model.data.transactions) : null), [model, filter]);
+
   const txs = useMemo(() => {
-    return model.data.transactions.filter((t) => {
+    const list = model.data.transactions.filter((t) => {
       if (!inRange(t, period.start, period.end)) return false;
       if (filter === 'uncategorized' && !isUncategorized(model, t)) return false;
       if (filter === 'split' && !t.splits) return false;
       if (filter === 'transfers' && !t.transferAccountId) return false;
+      if (dupes && !dupes.has(t.id)) return false;
       if (account && t.accountId !== account) return false;
       if (scopeMatch && !(t.splits ? t.splits.some((s) => scopeMatch(s.categoryId)) : scopeMatch(t.categoryId))) return false;
       if (q) {
@@ -61,7 +93,10 @@ export function TransactionsPage() {
       }
       return true;
     });
-  }, [model, period, filter, q, account, scopeMatch]);
+    // Keep look-alikes next to each other: by account, then amount, then date.
+    if (dupes) list.sort((a, b) => a.accountId.localeCompare(b.accountId) || a.amount - b.amount || b.date.localeCompare(a.date));
+    return list;
+  }, [model, period, filter, q, account, scopeMatch, dupes]);
 
   // Only rows still in the list count as selected, so changing a filter never edits rows you can't see.
   const selectable = useMemo(() => txs.filter((t) => editable(model, t)), [txs, model]);

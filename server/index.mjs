@@ -9,6 +9,7 @@ import {
   createCategory,
   createCategoryGroup,
   deleteCategory,
+  deleteTransactions,
   deleteCategoryGroup,
   loadActualData,
   makeTransfer,
@@ -245,6 +246,36 @@ app.post('/api/transactions/bulk', async (req, res) => {
     res.json({ ok: true, updated: changes.length, skipped });
   } catch (err) {
     console.error('Bulk edit failed:', err);
+    res.status(err.status ?? 502).json({ error: String(err?.message || err) });
+  }
+});
+
+/**
+ * Deletes transactions, e.g. a duplicate from bank sync. Starting balances are skipped. Deleting one
+ * side of a transfer keeps the other side as a plain transaction (see deleteTransactions).
+ */
+app.post('/api/transactions/delete', async (req, res) => {
+  const ids = new Set((Array.isArray(req.body?.txIds) ? req.body.txIds : []).filter((x) => typeof x === 'string'));
+  try {
+    const data = await getData();
+    const txs = data.transactions.filter((t) => ids.has(t.id) && !t.startingBalance);
+    if (!txs.length) throw badRequest('Nothing to delete; refresh and try again');
+    if (DEMO) {
+      const gone = new Set(txs.map((t) => t.id));
+      for (const t of data.transactions) {
+        if (gone.has(t.id) || !t.transferAccountId) continue;
+        // The other side of a deleted transfer stays, as an uncategorized transaction.
+        const other = txs.find((x) => x.transferAccountId === t.accountId && x.accountId === t.transferAccountId && x.date === t.date && x.amount === -t.amount);
+        if (other) t.transferAccountId = null;
+      }
+      data.transactions = data.transactions.filter((t) => !gone.has(t.id));
+    } else {
+      await deleteTransactions(txs.map((t) => ({ id: t.id, accountId: t.accountId, date: t.date })));
+      await getData(true);
+    }
+    res.json({ ok: true, deleted: txs.length, skipped: ids.size - txs.length });
+  } catch (err) {
+    console.error('Delete failed:', err);
     res.status(err.status ?? 502).json({ error: String(err?.message || err) });
   }
 });

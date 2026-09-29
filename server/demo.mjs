@@ -253,6 +253,9 @@ export function buildDemoData(now = new Date()) {
   ]) {
     track(add(recent(ago), acct, amt, payee, null, { cleared: false }));
   }
+  // A pending charge that bank sync also imported again once it posted: the "Possible duplicates" filter finds it.
+  track(add(recent(4), 'chk', -52.3, 'SHELL OIL 5744', null, { cleared: false }));
+  track(add(recent(2), 'chk', -52.3, 'Shell', null));
 
   txs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const accounts = ACCOUNTS.map(([id, name, offBudget, , institution]) => ({

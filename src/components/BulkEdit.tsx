@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { Trash2, X } from 'lucide-react';
 import { api, useStore } from '../store';
-import { CategoryOptions, TRANSFER } from './TxList';
+import { CategoryOptions, TRANSFER, confirmDelete } from './TxList';
 
 const UNCATEGORIZED = '__uncategorized';
 
@@ -9,7 +9,7 @@ type BulkResult = { updated: number; skipped: number; unmatched?: string[] };
 
 /** The bar shown while transactions are selected: pick one category (or a transfer account) and apply it to all of them. */
 export function BulkEdit({ txIds, onClear, onDone }: { txIds: string[]; onClear: () => void; onDone: (message: string) => void }) {
-  const { model, categorized, refresh } = useStore();
+  const { model, categorized, refresh, deleteTransactions } = useStore();
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const n = (k: number) => `${k} transaction${k === 1 ? '' : 's'}`;
@@ -47,6 +47,20 @@ export function BulkEdit({ txIds, onClear, onDone }: { txIds: string[]; onClear:
     }
   };
 
+  const remove = async () => {
+    const txs = model.data.transactions.filter((t) => txIds.includes(t.id));
+    if (!confirmDelete(model, txs)) return;
+    setBusy(true);
+    try {
+      await deleteTransactions(txIds);
+      onDone(`Deleted ${n(txs.length)}.`);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="bulk-bar">
       <b>{txIds.length} selected</b>
@@ -59,6 +73,9 @@ export function BulkEdit({ txIds, onClear, onDone }: { txIds: string[]; onClear:
       </select>
       <button className="btn primary" disabled={busy || !value} onClick={apply}>
         {busy ? 'Saving…' : 'Apply'}
+      </button>
+      <button className="btn" disabled={busy} onClick={remove} title="Delete selected transactions">
+        <Trash2 size={14} /> Delete
       </button>
       <button className="icon-btn subtle" onClick={onClear} disabled={busy} aria-label="Clear selection" title="Clear selection">
         <X size={14} />

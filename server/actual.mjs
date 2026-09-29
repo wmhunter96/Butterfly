@@ -247,6 +247,36 @@ export async function removeTransactionSplit(id, accountId, date, categoryId) {
   await api.sync();
 }
 
+/**
+ * Deletes transactions (a split goes with its lines). When one side of a transfer is deleted, Actual
+ * would delete the other side too; here the other side stays as an ordinary, uncategorized transaction,
+ * since it's usually a real bank transaction. Bank-imported transactions would come back on the next
+ * bank sync while "reimport deleted transactions" is on (Actual's default), so that is turned off for
+ * the account, the same as unticking it in Actual's bank sync settings.
+ */
+export async function deleteTransactions(list) {
+  await connect();
+  const deleted = new Set();
+  const counterparts = new Set();
+  const noReimport = new Set();
+  for (const { id, accountId, date } of list) {
+    const t = await fetchTransaction(id, accountId, date);
+    const rows = [t, ...(t.subtransactions || []).filter((s) => !s.tombstone)];
+    for (const r of rows) {
+      deleted.add(r.id);
+      if (r.transfer_id) counterparts.add(r.transfer_id);
+    }
+    if (t.imported_id) noReimport.add(t.account);
+  }
+  await internal.send('transactions-batch-update', {
+    updated: [...counterparts].filter((id) => !deleted.has(id)).map((id) => ({ id, transfer_id: null, payee: null })),
+    deleted: [...deleted].map((id) => ({ id })),
+    runTransfers: false,
+  });
+  for (const acct of noReimport) await internal.send('preferences/save', { id: `sync-reimport-deleted-${acct}`, value: 'false' });
+  await api.sync();
+}
+
 export async function syncActual() {
   await connect();
   await api.sync();
